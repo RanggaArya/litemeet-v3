@@ -1,20 +1,36 @@
 import twilio from 'twilio';
+import {
+    TWILIO_KEYS,
+    getTwilioKey,
+    advanceTwilioKey,
+} from '../_lib/keys';
 
 export async function GET() {
-    const accountSid = process.env.TWILIO_ACCOUNT_SID;
-    const authToken = process.env.TWILIO_AUTH_TOKEN;
+    const maxAttempts = TWILIO_KEYS.length;
+    let lastError = null;
 
-    const client = twilio(accountSid, authToken);
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+        const currentKey = getTwilioKey();
 
-    try {
+        try {
+            const client = twilio(currentKey.accountSid, currentKey.authToken);
+            const token = await client.tokens.create();
 
-        const token = await client.tokens.create();
+            console.log(`[TURN API] ✅ Twilio key "${currentKey.accountSid.slice(-6)}" berhasil`);
 
-        return Response.json({
-            iceServers: token.iceServers,
-        });
-    } catch (error) {
-        console.error("Twilio Error:", error);
-        return Response.json({ error: "Gagal ambil token" }, { status: 500 });
+            return Response.json({
+                iceServers: token.iceServers,
+            });
+        } catch (error) {
+            console.warn(`[TURN API] ⚠️ Twilio key "${currentKey.accountSid.slice(-6)}" gagal: ${error.message}`);
+            lastError = error;
+            advanceTwilioKey();
+        }
     }
+
+    console.error(`[TURN API] ❌ Semua ${maxAttempts} Twilio keys gagal!`);
+    return Response.json(
+        { error: `Gagal ambil TURN token. Error: ${lastError?.message}` },
+        { status: 503 }
+    );
 }

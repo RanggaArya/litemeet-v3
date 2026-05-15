@@ -28,6 +28,8 @@ const ICONS = {
   layout: `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><line x1="3" y1="9" x2="21" y2="9"></line><line x1="9" y1="21" x2="9" y2="9"></line></svg>`,
   chevronDown: `<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>`,
   settings: `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>`,
+  record: `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><circle cx="12" cy="12" r="4" fill="currentColor"></circle></svg>`,
+  recordStop: `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><rect x="9" y="9" width="6" height="6" rx="1" fill="currentColor"></rect></svg>`,
 };
 
 // --- BANDWIDTH MODE PRESETS ---
@@ -92,13 +94,84 @@ function buildRoomOptions(mode) {
   };
 }
 
+// --- MEETING HISTORY (localStorage) ---
+const HISTORY_KEY = 'litemeet_history';
+const LAST_USER_KEY = 'litemeet_last_user';
+const MAX_HISTORY = 50;
+
+function loadHistory() {
+  try {
+    return JSON.parse(localStorage.getItem(HISTORY_KEY) || '[]');
+  } catch { return []; }
+}
+
+function saveHistory(history) {
+  localStorage.setItem(HISTORY_KEY, JSON.stringify(history.slice(0, MAX_HISTORY)));
+}
+
+function addHistoryEntry(entry) {
+  const history = loadHistory();
+  history.unshift(entry);
+  saveHistory(history);
+}
+
+function loadLastUser() {
+  try {
+    return JSON.parse(localStorage.getItem(LAST_USER_KEY) || '{}');
+  } catch { return {}; }
+}
+
+function saveLastUser(room, name) {
+  localStorage.setItem(LAST_USER_KEY, JSON.stringify({ room, name }));
+}
+
+function formatDuration(seconds) {
+  const h = Math.floor(seconds / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  const s = seconds % 60;
+  if (h > 0) return `${h}j ${m}m`;
+  if (m > 0) return `${m}m ${s}d`;
+  return `${s}d`;
+}
+
+function formatDate(ts) {
+  const d = new Date(ts);
+  const now = new Date();
+  const isToday = d.toDateString() === now.toDateString();
+  const yesterday = new Date(now); yesterday.setDate(yesterday.getDate() - 1);
+  const isYesterday = d.toDateString() === yesterday.toDateString();
+  const time = d.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
+  if (isToday) return `Hari ini, ${time}`;
+  if (isYesterday) return `Kemarin, ${time}`;
+  return `${d.toLocaleDateString('id-ID', { day: 'numeric', month: 'short' })}, ${time}`;
+}
+
 export default function Home() {
   const [room, setRoom] = useState('');
   const [name, setName] = useState('');
   const [token, setToken] = useState('');
+  const [serverUrl, setServerUrl] = useState('');
   const [joined, setJoined] = useState(false);
   const [loading, setLoading] = useState(false);
   const [bandwidthMode, setBandwidthMode] = useState('saver'); // default hemat
+  const [connectionError, setConnectionError] = useState('');
+  const retryCountRef = useRef(0);
+  const userInitiatedLeaveRef = useRef(false);
+  const MAX_RETRIES = 11; // jumlah total LiveKit keys
+
+  // --- Meeting History ---
+  const [history, setHistory] = useState([]);
+  const [showHistory, setShowHistory] = useState(false);
+  const meetingStartRef = useRef(null);
+  const participantsRef = useRef(new Set());
+
+  // Load history & last-used credentials on mount
+  useEffect(() => {
+    setHistory(loadHistory());
+    const last = loadLastUser();
+    if (last.name) setName(last.name);
+    if (last.room) setRoom(last.room);
+  }, []);
 
   const [currentTime, setCurrentTime] = useState('');
 
@@ -111,14 +184,20 @@ export default function Home() {
 
   const roomOptions = useMemo(() => buildRoomOptions(bandwidthMode), [bandwidthMode]);
 
-  const joinRoom = async () => {
+  const joinRoom = async (isRetry = false) => {
     if (!room || !name) {
       alert("Mohon isi Nama Ruangan dan Nama Anda!");
       return;
     }
     setLoading(true);
+    setConnectionError('');
 
     try {
+      // If this is a retry, first tell server to switch to next key
+      if (isRetry) {
+        await fetch('/api/switch-key', { method: 'POST' });
+      }
+
       const resp = await fetch('/api/token', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -126,31 +205,85 @@ export default function Home() {
       });
       const data = await resp.json();
 
-      if (data.token) {
+      if (data.token && data.serverUrl) {
         setToken(data.token);
+        setServerUrl(data.serverUrl);
         setJoined(true);
+        retryCountRef.current = 0;
+        userInitiatedLeaveRef.current = false;
+        meetingStartRef.current = Date.now();
+        participantsRef.current = new Set();
+        saveLastUser(room, name);
+        console.log(`[LiteMeet] 🟢 Connected with LiveKit key #${data.keyIndex} → ${data.serverUrl}`);
       } else {
-        alert("Gagal mendapatkan token.");
+        setConnectionError(data.error || 'Gagal mendapatkan token.');
       }
     } catch (e) {
       console.error(e);
-      alert("Terjadi kesalahan koneksi.");
+      setConnectionError('Terjadi kesalahan koneksi.');
     } finally {
       setLoading(false);
     }
   };
+
+  // Save meeting to history
+  const saveMeetingToHistory = useCallback(() => {
+    if (!meetingStartRef.current) return;
+    const duration = Math.floor((Date.now() - meetingStartRef.current) / 1000);
+    if (duration < 3) return; // don't save if < 3s (failed connects)
+    const entry = {
+      id: Date.now(),
+      room,
+      name,
+      startTime: meetingStartRef.current,
+      duration,
+      participants: Array.from(participantsRef.current).filter(p => p !== name),
+    };
+    addHistoryEntry(entry);
+    setHistory(loadHistory());
+    meetingStartRef.current = null;
+  }, [room, name]);
+
+  // Auto-retry with next key when disconnected unexpectedly
+  const handleDisconnected = useCallback(() => {
+    if (userInitiatedLeaveRef.current) {
+      // Intentional leave by user
+      setJoined(false);
+      setToken('');
+      setServerUrl('');
+      return;
+    }
+
+    if (retryCountRef.current < MAX_RETRIES) {
+      retryCountRef.current += 1;
+      console.log(`[LiteMeet] 🔄 Disconnected — auto-retrying with next key (attempt ${retryCountRef.current}/${MAX_RETRIES})...`);
+      setJoined(false);
+      setToken('');
+      setServerUrl('');
+      // Small delay before retry
+      setTimeout(() => joinRoom(true), 1500);
+    } else {
+      console.log('[LiteMeet] ❌ Max retries reached, returning to lobby.');
+      saveMeetingToHistory();
+      setJoined(false);
+      setToken('');
+      setServerUrl('');
+      setConnectionError('Semua server LiveKit penuh. Coba lagi nanti.');
+    }
+  }, [room, name, saveMeetingToHistory]);
 
   if (!joined) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-slate-50 via-indigo-50/40 to-purple-50/30 text-gray-800 p-4 font-sans relative overflow-hidden">
         <ParticleCanvas />
 
-        <div className="w-full max-w-sm bg-gradient-to-b from-pink-50/80 to-white/95 backdrop-blur-3xl px-5 py-5 rounded-[1.5rem] shadow-[0_20px_80px_rgba(236,72,153,0.08),0_8px_32px_rgba(0,0,0,0.06)] border border-pink-100/60 z-10 animate-slide-up relative overflow-hidden group">
-          {/* Efek kilap on hover */}
-          <div className="absolute top-0 -inset-full h-full w-1/2 z-5 block transform -skew-x-12 bg-gradient-to-r from-transparent to-white opacity-40 group-hover:animate-shine"></div>
+        <div className="relative w-full max-w-sm z-10 animate-slide-up">
+          <div className="w-full bg-gradient-to-b from-pink-50/80 to-white/95 backdrop-blur-3xl px-5 py-5 rounded-[1.5rem] shadow-[0_20px_80px_rgba(236,72,153,0.08),0_8px_32px_rgba(0,0,0,0.06)] border border-pink-100/60 relative overflow-hidden group">
+            {/* Efek kilap on hover */}
+            <div className="absolute top-0 -inset-full h-full w-1/2 z-5 block transform -skew-x-12 bg-gradient-to-r from-transparent to-white opacity-40 group-hover:animate-shine"></div>
 
-          {/* Clock */}
-          <div className="absolute top-3 right-4 text-[10px] font-mono text-gray-400 font-medium z-10">{currentTime}</div>
+            {/* Clock */}
+            <div className="absolute top-3 right-4 text-[10px] font-mono text-gray-400 font-medium z-10">{currentTime}</div>
 
           <div className="text-center mb-4">
             <div className="inline-flex items-center justify-center w-12 h-12 rounded-2xl bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500 mb-3 shadow-lg ring-3 ring-pink-100 animate-float">
@@ -201,11 +334,77 @@ export default function Home() {
               </div>
             </div>
 
-            <button onClick={joinRoom} disabled={loading} className="w-full bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white py-2.5 rounded-xl font-bold text-sm shadow-lg shadow-indigo-200/50 transition-all transform hover:-translate-y-0.5 active:translate-y-0 mt-1">
-              {loading ? "Menghubungkan..." : "Mulai Meeting"}
+            {connectionError && (
+              <div className="px-3 py-2 rounded-lg bg-red-50 border border-red-200 text-red-600 text-[10px] font-medium flex items-center gap-1.5 mt-1">
+                <span>⚠️</span>
+                <span>{connectionError}</span>
+              </div>
+            )}
+
+            <button onClick={() => joinRoom(false)} disabled={loading} className="w-full bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white py-2.5 rounded-xl font-bold text-sm shadow-lg shadow-indigo-200/50 transition-all transform hover:-translate-y-0.5 active:translate-y-0 mt-1">
+              {loading ? "⏳ Menghubungkan..." : "Mulai Meeting"}
             </button>
             <p className="text-center text-[9px] text-gray-300 font-medium mt-1">Powered by Aralya @2026</p>
           </div>
+        </div>
+
+        {/* === MEETING HISTORY PANEL (right side, top-aligned) === */}
+        {history.length > 0 && (
+          <div className="absolute top-0 left-[calc(100%+1rem)] w-[300px] z-10" style={{ maxHeight: '100%' }}>
+            <button
+              onClick={() => setShowHistory(!showHistory)}
+              className="w-full flex items-center justify-between px-4 py-2.5 bg-white/80 backdrop-blur-xl rounded-xl border border-gray-200/60 shadow-sm hover:shadow-md transition-all text-left group"
+            >
+              <div className="flex items-center gap-2">
+                <span className="text-sm">📋</span>
+                <span className="text-[11px] font-bold text-gray-600">Riwayat Meeting</span>
+                <span className="text-[9px] bg-indigo-100 text-indigo-600 px-1.5 py-0.5 rounded-full font-bold">{history.length}</span>
+              </div>
+              <svg className={`w-3.5 h-3.5 text-gray-400 transition-transform duration-200 ${showHistory ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor"><polyline points="6 9 12 15 18 9" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+            </button>
+
+            {showHistory && (
+              <div className="mt-1.5 bg-white/90 backdrop-blur-xl rounded-xl border border-gray-200/60 shadow-lg overflow-hidden" style={{ maxHeight: 'calc(100% - 52px)' }}>
+                <div className="overflow-y-auto divide-y divide-gray-100" style={{ maxHeight: 'calc(100% - 36px)' }}>
+                  {history.map((h) => (
+                    <button key={h.id} onClick={() => { setRoom(h.room); setName(h.name); setShowHistory(false); }} className="w-full px-3.5 py-2.5 flex items-start gap-3 hover:bg-indigo-50/60 transition-colors text-left group">
+                      <div className="w-8 h-8 rounded-full bg-gradient-to-br from-indigo-100 to-purple-100 flex items-center justify-center flex-shrink-0 mt-0.5">
+                        <svg className="w-3.5 h-3.5 text-indigo-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-[11px] font-bold text-gray-800 truncate">{h.room}</span>
+                          <span className="text-[9px] text-gray-400 flex-shrink-0">{formatDate(h.startTime)}</span>
+                        </div>
+                        <div className="flex items-center gap-1.5 mt-0.5">
+                          <span className="text-[9px] text-gray-400">⏱ {formatDuration(h.duration)}</span>
+                          <span className="text-[9px] text-gray-300">•</span>
+                          <span className="text-[9px] text-gray-400">👤 {h.participants.length > 0 ? h.participants[0] : 'Hanya Anda'}</span>
+                        </div>
+                        {h.participants && h.participants.length > 1 && (
+                          <div className="flex items-center gap-1 mt-1 flex-wrap">
+                            {h.participants.slice(1, 4).map((p, i) => (
+                              <span key={i} className="text-[8px] bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded-full">{p}</span>
+                            ))}
+                            {h.participants.length > 4 && (
+                              <span className="text-[8px] text-gray-400">+{h.participants.length - 4} lainnya</span>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                      <svg className="w-3.5 h-3.5 text-gray-300 group-hover:text-indigo-500 transition-colors flex-shrink-0 mt-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><polyline points="9 18 15 12 9 6" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                    </button>
+                  ))}
+                </div>
+                <div className="px-3 py-2 border-t border-gray-100 bg-gray-50/50">
+                  <button onClick={() => { saveHistory([]); setHistory([]); }} className="text-[9px] text-red-400 hover:text-red-600 font-medium transition-colors">
+                    🗑️ Hapus Semua Riwayat
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
         </div>
 
         {/* Version info */}
@@ -228,13 +427,13 @@ export default function Home() {
       video={true}
       audio={true}
       token={token}
-      serverUrl={process.env.NEXT_PUBLIC_LIVEKIT_URL}
+      serverUrl={serverUrl}
       data-lk-theme="default"
       style={{ height: '100dvh', backgroundColor: '#030712' }}
-      onDisconnected={() => { setJoined(false); setToken(''); }}
+      onDisconnected={handleDisconnected}
       options={roomOptions}
     >
-      <MyVideoConference myName={name} bandwidthMode={bandwidthMode} setBandwidthMode={setBandwidthMode} />
+      <MyVideoConference myName={name} bandwidthMode={bandwidthMode} setBandwidthMode={setBandwidthMode} participantsRef={participantsRef} saveMeetingToHistory={saveMeetingToHistory} onManualLeave={() => { userInitiatedLeaveRef.current = true; }} />
       <RoomAudioRenderer />
     </LiveKitRoom>
   );
@@ -481,7 +680,7 @@ const ParticleCanvas = () => {
   return <canvas ref={canvasRef} className="absolute inset-0 z-0" />;
 };
 
-function MyVideoConference({ myName, bandwidthMode, setBandwidthMode }) {
+function MyVideoConference({ myName, bandwidthMode, setBandwidthMode, participantsRef, saveMeetingToHistory, onManualLeave }) {
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
   const [toasts, setToasts] = useState([]);
@@ -501,6 +700,21 @@ function MyVideoConference({ myName, bandwidthMode, setBandwidthMode }) {
 
   // --- DESKTOP SCREEN SHARE PICKER STATE ---
   const [desktopSources, setDesktopSources] = useState(null);
+
+  const [isRecording, setIsRecording] = useState(false);
+  const [recordingDuration, setRecordingDuration] = useState(0);
+  const mediaRecorderRef = useRef(null);
+  const recordedChunksRef = useRef([]);
+  const recordingTimerRef = useRef(null);
+
+  // --- REACTIVE PARTICIPANT TRACKING for history ---
+  const remoteParticipantsForHistory = useRemoteParticipants();
+  useEffect(() => {
+    if (!participantsRef?.current) return;
+    remoteParticipantsForHistory.forEach(p => {
+      participantsRef.current.add(p.identity);
+    });
+  }, [remoteParticipantsForHistory, participantsRef]);
 
   // --- Enumerate devices ---
   const refreshDevices = useCallback(async () => {
@@ -684,7 +898,149 @@ function MyVideoConference({ myName, bandwidthMode, setBandwidthMode }) {
   const toggleMic = () => localParticipant.setMicrophoneEnabled(isMuted);
   const toggleCam = () => localParticipant.setCameraEnabled(isCamOff);
   const toggleScreen = () => localParticipant.setScreenShareEnabled(!isSharing);
-  const leave = () => room.disconnect();
+  const leave = () => {
+    // Stop recording if active before leaving
+    if (isRecording) stopRecording();
+    // Save meeting to history before disconnecting
+    if (saveMeetingToHistory) saveMeetingToHistory();
+    // Signal intentional leave
+    if (onManualLeave) onManualLeave();
+    room.disconnect();
+  };
+
+  // --- SCREEN RECORDING LOGIC ---
+  const startRecording = useCallback(async () => {
+    try {
+      const displayStream = await navigator.mediaDevices.getDisplayMedia({
+        video: { mediaSource: 'screen', frameRate: 30 },
+        audio: true,
+        preferCurrentTab: true,
+      });
+
+      // Try to capture system audio + meeting audio
+      let combinedStream = displayStream;
+      try {
+        const audioCtx = new AudioContext();
+        const destination = audioCtx.createMediaStreamDestination();
+
+        // Add display audio tracks if available
+        displayStream.getAudioTracks().forEach(track => {
+          const source = audioCtx.createMediaStreamSource(new MediaStream([track]));
+          source.connect(destination);
+        });
+
+        // Add meeting audio from any playing <audio>/<video> elements
+        const audioElements = document.querySelectorAll('audio, video');
+        audioElements.forEach(el => {
+          try {
+            if (el.srcObject || el.src) {
+              const source = audioCtx.createMediaElementSource(el);
+              source.connect(destination);
+              source.connect(audioCtx.destination); // keep hearing it
+            }
+          } catch { /* element already captured or no source */ }
+        });
+
+        const videoTrack = displayStream.getVideoTracks()[0];
+        combinedStream = new MediaStream([
+          videoTrack,
+          ...destination.stream.getAudioTracks(),
+        ]);
+      } catch {
+        // Fallback: just use the display stream as-is
+        console.warn('[Recording] Could not mix audio, using display stream only');
+      }
+
+      recordedChunksRef.current = [];
+
+      // Prefer MP4 format, fallback to WebM
+      let mimeType = 'video/webm';
+      let fileExt = 'webm';
+      if (MediaRecorder.isTypeSupported('video/mp4;codecs=avc1.42E01E,mp4a.40.2')) {
+        mimeType = 'video/mp4;codecs=avc1.42E01E,mp4a.40.2';
+        fileExt = 'mp4';
+      } else if (MediaRecorder.isTypeSupported('video/mp4')) {
+        mimeType = 'video/mp4';
+        fileExt = 'mp4';
+      } else if (MediaRecorder.isTypeSupported('video/webm;codecs=vp9,opus')) {
+        mimeType = 'video/webm;codecs=vp9,opus';
+      }
+
+      const recorder = new MediaRecorder(combinedStream, { mimeType });
+
+      recorder.ondataavailable = (e) => {
+        if (e.data.size > 0) recordedChunksRef.current.push(e.data);
+      };
+
+      recorder.onstop = async () => {
+        const blob = new Blob(recordedChunksRef.current, { type: mimeType });
+        const fileName = `LiteMeet-Recording-${new Date().toISOString().slice(0,19).replace(/:/g,'-')}.${fileExt}`;
+
+        // Desktop Electron: save directly to local folder
+        if (typeof window !== 'undefined' && window.electronAPI?.saveRecording) {
+          try {
+            const arrayBuffer = await blob.arrayBuffer();
+            const result = await window.electronAPI.saveRecording(fileName, arrayBuffer);
+            if (result.success) {
+              addToast(`💾 Rekaman disimpan: ${result.path}`, 'success');
+            } else {
+              addToast('⚠️ Gagal menyimpan rekaman', 'error');
+            }
+          } catch {
+            addToast('⚠️ Gagal menyimpan rekaman', 'error');
+          }
+        } else {
+          // Browser: download via anchor tag
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = fileName;
+          a.click();
+          URL.revokeObjectURL(url);
+          addToast('💾 Rekaman berhasil di-download!', 'success');
+        }
+      };
+
+      // Stop recording if user stops screen share from browser UI
+      displayStream.getVideoTracks()[0].onended = () => {
+        if (mediaRecorderRef.current?.state === 'recording') {
+          stopRecording();
+        }
+      };
+
+      recorder.start(1000); // collect data every 1s
+      mediaRecorderRef.current = recorder;
+      setIsRecording(true);
+      setRecordingDuration(0);
+
+      // Timer
+      recordingTimerRef.current = setInterval(() => {
+        setRecordingDuration(prev => prev + 1);
+      }, 1000);
+
+      addToast(`🔴 Merekam layar (${fileExt.toUpperCase()})...`, 'info');
+    } catch (err) {
+      if (err.name !== 'NotAllowedError') {
+        console.error('[Recording] Error:', err);
+        addToast('Gagal memulai rekaman', 'error');
+      }
+    }
+  }, [addToast]);
+
+  const stopRecording = useCallback(() => {
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+      mediaRecorderRef.current.stop();
+      // Stop all tracks from the stream
+      mediaRecorderRef.current.stream.getTracks().forEach(t => t.stop());
+    }
+    mediaRecorderRef.current = null;
+    setIsRecording(false);
+    setRecordingDuration(0);
+    if (recordingTimerRef.current) {
+      clearInterval(recordingTimerRef.current);
+      recordingTimerRef.current = null;
+    }
+  }, []);
 
   // --- Switch device logic ---
   const switchMicrophone = useCallback(async (deviceId) => {
@@ -760,6 +1116,17 @@ function MyVideoConference({ myName, bandwidthMode, setBandwidthMode }) {
           <span className="text-white text-[10px] sm:text-xs font-mono font-bold tracking-wider leading-none">{durationStr}</span>
           <div className="w-px h-3 bg-white/20"></div>
           <BandwidthMonitor bandwidthMode={bandwidthMode} />
+          {isRecording && (
+            <>
+              <div className="w-px h-3 bg-white/20"></div>
+              <div className="flex items-center gap-1">
+                <div className="w-2 h-2 rounded-full bg-red-500 animate-pulse shadow-[0_0_8px_rgba(239,68,68,0.8)]"></div>
+                <span className="text-red-400 text-[8px] sm:text-[10px] font-bold uppercase tracking-wider">
+                  REC {Math.floor(recordingDuration/60).toString().padStart(2,'0')}:{(recordingDuration%60).toString().padStart(2,'0')}
+                </span>
+              </div>
+            </>
+          )}
         </div>
       </div>
 
@@ -991,6 +1358,19 @@ function MyVideoConference({ myName, bandwidthMode, setBandwidthMode }) {
               <div className="scale-75 sm:scale-100" dangerouslySetInnerHTML={{ __html: ICONS.pip }} />
             </button>
           )}
+
+          {/* === SCREEN RECORDING === */}
+          <button
+            onClick={isRecording ? stopRecording : startRecording}
+            title={isRecording ? `Berhenti Merekam (${Math.floor(recordingDuration/60).toString().padStart(2,'0')}:${(recordingDuration%60).toString().padStart(2,'0')})` : 'Rekam Layar'}
+            className={`p-2.5 sm:p-3 rounded-xl sm:rounded-2xl transition-all duration-300 flex-shrink-0 ${
+              isRecording
+                ? 'bg-red-500 text-white shadow-[0_0_20px_rgba(239,68,68,0.5)] animate-pulse'
+                : 'bg-white/10 text-white hover:bg-white/20'
+            }`}
+          >
+            <div className="scale-75 sm:scale-100" dangerouslySetInnerHTML={{ __html: isRecording ? ICONS.recordStop : ICONS.record }} />
+          </button>
 
           {/* --- DATA SAVER TOGGLE --- */}
           <button

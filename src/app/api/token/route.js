@@ -1,5 +1,10 @@
 import { AccessToken } from 'livekit-server-sdk';
 import { NextResponse } from 'next/server';
+import {
+    LIVEKIT_KEYS,
+    getLivekitKey,
+    advanceLivekitKey,
+} from '../_lib/keys';
 
 export async function POST(req) {
     try {
@@ -9,22 +14,46 @@ export async function POST(req) {
             return NextResponse.json({ error: 'Missing room or username' }, { status: 400 });
         }
 
-        const apiKey = process.env.LIVEKIT_API_KEY;
-        const apiSecret = process.env.LIVEKIT_API_SECRET;
-        const wsUrl = process.env.NEXT_PUBLIC_LIVEKIT_URL;
+        // Try each LiveKit key until one works (max = total keys)
+        const maxAttempts = LIVEKIT_KEYS.length;
+        let lastError = null;
 
-        if (!apiKey || !apiSecret || !wsUrl) {
-            return NextResponse.json({ error: 'Server misconfigured' }, { status: 500 });
+        for (let attempt = 0; attempt < maxAttempts; attempt++) {
+            const currentKey = getLivekitKey();
+
+            try {
+                const at = new AccessToken(currentKey.apiKey, currentKey.apiSecret, {
+                    identity: username,
+                });
+
+                at.addGrant({ roomJoin: true, room: room });
+
+                const token = await at.toJwt();
+
+                console.log(`[Token API] ✅ Using LiveKit key #${currentKey.index} (${currentKey.apiKey}) for room "${room}"`);
+
+                // Return token + serverUrl so client knows which server to connect to
+                return NextResponse.json({
+                    token,
+                    serverUrl: currentKey.url,
+                    keyIndex: currentKey.index,
+                });
+            } catch (err) {
+                console.warn(`[Token API] ⚠️ LiveKit key #${currentKey.index} (${currentKey.apiKey}) failed: ${err.message}`);
+                lastError = err;
+                // Advance to next key and retry
+                advanceLivekitKey();
+            }
         }
 
-        const at = new AccessToken(apiKey, apiSecret, {
-            identity: username,
-        });
-
-        at.addGrant({ roomJoin: true, room: room });
-
-        return NextResponse.json({ token: await at.toJwt() });
+        // All keys exhausted
+        console.error(`[Token API] ❌ All ${maxAttempts} LiveKit keys failed!`);
+        return NextResponse.json(
+            { error: `Semua API key LiveKit gagal. Error terakhir: ${lastError?.message}` },
+            { status: 503 }
+        );
     } catch (error) {
+        console.error('[Token API] ❌ Unexpected error:', error);
         return NextResponse.json({ error: error.message }, { status: 500 });
     }
 }

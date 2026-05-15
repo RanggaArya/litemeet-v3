@@ -230,3 +230,27 @@ ipcMain.on('desktop-picker-result', async (event, sourceId) => {
     currentScreenShareCallback = null;
   }
 });
+
+// --- SCREEN RECORDING: Save file to local Documents folder ---
+ipcMain.handle('save-recording', async (event, fileName, arrayBuffer) => {
+  try {
+    const documentsPath = app.getPath('documents');
+    const recordingsDir = path.join(documentsPath, 'LiteMeet Recordings');
+
+    // Create folder if it doesn't exist
+    if (!fs.existsSync(recordingsDir)) {
+      fs.mkdirSync(recordingsDir, { recursive: true });
+    }
+
+    const filePath = path.join(recordingsDir, fileName);
+    const buffer = Buffer.from(arrayBuffer);
+    fs.writeFileSync(filePath, buffer);
+
+    console.log(`[Recording] ✅ Saved: ${filePath} (${(buffer.length / 1024 / 1024).toFixed(1)} MB)`);
+
+    return { success: true, path: filePath };
+  } catch (err) {
+    console.error('[Recording] ❌ Save failed:', err);
+    return { success: false, error: err.message };
+  }
+});

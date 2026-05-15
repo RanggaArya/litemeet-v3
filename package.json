@@ -39,6 +39,7 @@
         "nsis"
       ]
     },
+    "compression": "store",
     "nsis": {
       "oneClick": true,
       "perMachine": false,
