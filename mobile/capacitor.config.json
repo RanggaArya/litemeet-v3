@@ -1,0 +1,19 @@
+{
+  "appId": "com.aralya.litemeet",
+  "appName": "LiteMeet",
+  "webDir": "dist",
+  "server": {
+    "androidScheme": "https"
+  },
+  "plugins": {
+    "ForegroundService": {
+      "smallIcon": "ic_stat_videocam",
+      "buttons": []
+    }
+  },
+  "android": {
+    "allowMixedContent": true,
+    "captureInput": true,
+    "webContentsDebuggingEnabled": false
+  }
+}
