@@ -400,6 +400,7 @@ function MeetingView({ myName, bandwidthMode, setBandwidthMode, participantsRef,
 // ===================== MAIN APP =====================
 export default function App() {
   const [room, setRoom] = useState('');
+  const [password, setPassword] = useState('');
   const [name, setName] = useState('');
   const [token, setToken] = useState('');
   const [serverUrl, setServerUrl] = useState('');
@@ -434,10 +435,11 @@ export default function App() {
     if (!room || !name) { alert('Mohon isi Nama Room dan Nama Anda!'); return; }
     setLoading(true); setConnectionError('');
     try {
+      const actualRoomName = password ? `${room}___${password}` : room;
       const resp = await fetch(`${API_BASE}/api/token`, { 
         method: 'POST', 
         headers: { 'Content-Type': 'application/json' }, 
-        body: JSON.stringify({ room, username: name, retryCount: retryCountRef.current }) 
+        body: JSON.stringify({ room: actualRoomName, username: name, retryCount: retryCountRef.current }) 
       });
       const data = await resp.json();
       if (data.token && data.serverUrl) {
@@ -496,6 +498,10 @@ export default function App() {
             <div>
               <label className="lobby-label">Display Name</label>
               <input className="lobby-input" placeholder="Ex: Ara" value={name} onChange={e => setName(e.target.value)} />
+            </div>
+            <div>
+              <label className="lobby-label">Password (Opsional)</label>
+              <input type="password" maxLength={20} className="lobby-input" placeholder="Kosongkan jika publik" value={password} onChange={e => setPassword(e.target.value)} />
             </div>
 
             {/* Bandwidth mode */}

@@ -148,6 +148,7 @@ function formatDate(ts) {
 
 export default function Home() {
   const [room, setRoom] = useState('');
+  const [password, setPassword] = useState('');
   const [name, setName] = useState('');
   const [token, setToken] = useState('');
   const [serverUrl, setServerUrl] = useState('');
@@ -193,15 +194,13 @@ export default function Home() {
     setConnectionError('');
 
     try {
-      // Tentukan base URL: Jika Desktop, tembak langsung ke Vercel agar tersentral.
-      // Jika Web, biarkan pakai relative path (/api/token).
       const apiUrl = isDesktopApp ? 'https://litemeet-v3.vercel.app/api/token' : '/api/token';
+      const actualRoomName = password ? `${room}___${password}` : room;
 
       const resp = await fetch(apiUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        // Kirim retryCount (jika isRetry true, kita ambil dari ref yang sudah ditambah di handleDisconnected)
-        body: JSON.stringify({ room, username: name, retryCount: retryCountRef.current }),
+        body: JSON.stringify({ room: actualRoomName, username: name, retryCount: retryCountRef.current }),
       });
       const data = await resp.json();
 
@@ -302,6 +301,12 @@ export default function Home() {
               <label className="text-[9px] font-bold text-gray-400 uppercase ml-1 mb-0.5 block tracking-wider">Display Name</label>
               <input className="w-full px-3 py-2 rounded-lg bg-white text-gray-800 border border-gray-200 focus:border-pink-400 focus:ring-2 focus:ring-pink-100 outline-none transition-all text-sm font-medium" placeholder="Ex: Ara" onChange={(e) => setName(e.target.value)} value={name} />
             </div>
+
+            <div>
+              <label className="text-[9px] font-bold text-gray-400 uppercase ml-1 mb-0.5 block tracking-wider">Password (Opsional)</label>
+              <input type="password" maxLength={20} className="w-full px-3 py-2 rounded-lg bg-white text-gray-800 border border-gray-200 focus:border-pink-400 focus:ring-2 focus:ring-pink-100 outline-none transition-all text-sm font-medium" placeholder="Kosongkan jika publik" onChange={(e) => setPassword(e.target.value)} value={password} />
+            </div>
+
 
             {/* === MODE SELECTION (ULTRA COMPACT) === */}
             <div>
@@ -1190,16 +1195,16 @@ function MyVideoConference({ myName, bandwidthMode, setBandwidthMode, participan
       <div className="flex-grow flex overflow-hidden relative">
 
         {/* KOLOM VIDEO */}
-        <div className="flex-grow flex flex-col p-4 gap-4 h-full relative transition-all duration-500 remove-padding-in-pip min-h-0 min-w-0 overflow-hidden">
+        <div className="flex-grow flex flex-col h-full relative transition-all duration-500 remove-padding-in-pip min-h-0 min-w-0 overflow-hidden bg-black">
 
           {isScreenSharing ? (
-            <div className="flex-grow flex gap-4 h-full">
-              <div className="flex-grow rounded-2xl overflow-hidden bg-black border border-white/10 shadow-2xl relative">
+            <div className="flex-grow flex h-full">
+              <div className="flex-grow overflow-hidden bg-black relative">
                 {screenTracks.map((track) => (
                   <ParticipantTile key={track.publication.trackSid} trackRef={track} />
                 ))}
               </div>
-              <div className="w-56 flex-shrink-0 flex flex-col gap-2 overflow-y-auto custom-scrollbar hidden md:flex">
+              <div className="w-56 flex-shrink-0 flex flex-col gap-2 overflow-y-auto custom-scrollbar hidden md:flex border-l border-white/10 bg-gray-900">
                 <GridLayout tracks={cameraTracks}><ParticipantTile /></GridLayout>
               </div>
             </div>
@@ -1283,20 +1288,20 @@ function MyVideoConference({ myName, bandwidthMode, setBandwidthMode, participan
       </div>
 
       {/* --- AREA BAWAH: CONTROL BAR --- */}
-      <div className="flex-shrink-0 flex justify-center py-2 sm:py-4 bg-gradient-to-t from-black/40 to-transparent z-50 hide-in-pip w-full">
-        <div className="flex items-center gap-1.5 sm:gap-3 bg-white/5 backdrop-blur-2xl px-3 sm:px-6 py-2 sm:py-3 rounded-2xl sm:rounded-3xl border border-white/10 shadow-[0_8px_32px_rgba(0,0,0,0.4)] max-w-[98vw] overflow-x-auto no-scrollbar">
+      <div className="flex-shrink-0 flex justify-center py-1 bg-black z-50 hide-in-pip w-full border-t border-white/10">
+        <div className="flex items-center gap-1 sm:gap-2 px-2 sm:px-4 py-1.5 sm:py-2 rounded-xl max-w-[98vw] overflow-x-auto no-scrollbar">
 
           {/* === MIC BUTTON WITH DEVICE SELECTOR === */}
           <div className="relative flex items-center flex-shrink-0">
-            <button onClick={toggleMic} className={`p-2.5 sm:p-3 rounded-l-xl sm:rounded-l-2xl transition-all duration-300 ${isMuted ? 'bg-red-500 text-white shadow-[0_0_20px_rgba(239,68,68,0.4)]' : 'bg-white/10 text-white hover:bg-white/20'}`}>
-              <div className="scale-75 sm:scale-100" dangerouslySetInnerHTML={{ __html: isMuted ? ICONS.micOff : ICONS.mic }} />
+            <button onClick={toggleMic} className={`p-2 sm:p-2.5 rounded-l-lg sm:rounded-l-xl transition-all duration-300 ${isMuted ? 'bg-red-500 text-white shadow-[0_0_15px_rgba(239,68,68,0.4)]' : 'bg-white/10 text-white hover:bg-white/20'}`}>
+              <div className="scale-75" dangerouslySetInnerHTML={{ __html: isMuted ? ICONS.micOff : ICONS.mic }} />
             </button>
             <button
               onClick={() => { setShowMicSelector(!showMicSelector); setShowCamSelector(false); refreshDevices(); }}
-              className={`p-1.5 sm:p-2 rounded-r-xl sm:rounded-r-2xl border-l transition-all duration-300 ${isMuted ? 'bg-red-600 border-red-400/30 text-white hover:bg-red-400' : 'bg-white/10 border-white/10 text-gray-400 hover:bg-white/20 hover:text-white'}`}
+              className={`p-1.5 sm:p-2 rounded-r-lg sm:rounded-r-xl border-l transition-all duration-300 ${isMuted ? 'bg-red-600 border-red-400/30 text-white hover:bg-red-400' : 'bg-white/10 border-white/10 text-gray-400 hover:bg-white/20 hover:text-white'}`}
               title="Pilih Mikrofon"
             >
-              <div className="scale-75 sm:scale-100" dangerouslySetInnerHTML={{ __html: ICONS.chevronDown }} />
+              <div className="scale-75" dangerouslySetInnerHTML={{ __html: ICONS.chevronDown }} />
             </button>
             {showMicSelector && (
               <DeviceSelector
@@ -1311,15 +1316,15 @@ function MyVideoConference({ myName, bandwidthMode, setBandwidthMode, participan
 
           {/* === CAM BUTTON WITH DEVICE SELECTOR === */}
           <div className="relative flex items-center flex-shrink-0">
-            <button onClick={toggleCam} className={`p-2.5 sm:p-3 rounded-l-xl sm:rounded-l-2xl transition-all duration-300 ${isCamOff ? 'bg-red-500 text-white shadow-[0_0_20px_rgba(239,68,68,0.4)]' : 'bg-white/10 text-white hover:bg-white/20'}`}>
-              <div className="scale-75 sm:scale-100" dangerouslySetInnerHTML={{ __html: isCamOff ? ICONS.camOff : ICONS.cam }} />
+            <button onClick={toggleCam} className={`p-2 sm:p-2.5 rounded-l-lg sm:rounded-l-xl transition-all duration-300 ${isCamOff ? 'bg-red-500 text-white shadow-[0_0_15px_rgba(239,68,68,0.4)]' : 'bg-white/10 text-white hover:bg-white/20'}`}>
+              <div className="scale-75" dangerouslySetInnerHTML={{ __html: isCamOff ? ICONS.camOff : ICONS.cam }} />
             </button>
             <button
               onClick={() => { setShowCamSelector(!showCamSelector); setShowMicSelector(false); refreshDevices(); }}
-              className={`p-1.5 sm:p-2 rounded-r-xl sm:rounded-r-2xl border-l transition-all duration-300 ${isCamOff ? 'bg-red-600 border-red-400/30 text-white hover:bg-red-400' : 'bg-white/10 border-white/10 text-gray-400 hover:bg-white/20 hover:text-white'}`}
+              className={`p-1.5 sm:p-2 rounded-r-lg sm:rounded-r-xl border-l transition-all duration-300 ${isCamOff ? 'bg-red-600 border-red-400/30 text-white hover:bg-red-400' : 'bg-white/10 border-white/10 text-gray-400 hover:bg-white/20 hover:text-white'}`}
               title="Pilih Kamera"
             >
-              <div className="scale-75 sm:scale-100" dangerouslySetInnerHTML={{ __html: ICONS.chevronDown }} />
+              <div className="scale-75" dangerouslySetInnerHTML={{ __html: ICONS.chevronDown }} />
             </button>
             {showCamSelector && (
               <DeviceSelector
@@ -1333,8 +1338,8 @@ function MyVideoConference({ myName, bandwidthMode, setBandwidthMode, participan
           </div>
 
           {/* === SCREEN SHARE === */}
-          <button onClick={toggleScreen} className={`hidden md:block p-2.5 sm:p-3 rounded-xl sm:rounded-2xl transition-all duration-300 flex-shrink-0 ${isSharing ? 'bg-green-500 text-white' : 'bg-white/10 text-white hover:bg-white/20'}`}>
-            <div className="scale-75 sm:scale-100" dangerouslySetInnerHTML={{ __html: ICONS.screen }} />
+          <button onClick={toggleScreen} className={`hidden md:block p-2 sm:p-2.5 rounded-lg sm:rounded-xl transition-all duration-300 flex-shrink-0 ${isSharing ? 'bg-green-500 text-white' : 'bg-white/10 text-white hover:bg-white/20'}`}>
+            <div className="scale-75" dangerouslySetInnerHTML={{ __html: ICONS.screen }} />
           </button>
 
           {/* --- ONLY FOR 1v1: TOGGLE GRID/PIP --- */}
@@ -1342,9 +1347,9 @@ function MyVideoConference({ myName, bandwidthMode, setBandwidthMode, participan
             <button
               onClick={() => setOneOnOneMode(m => m === 'grid' ? 'remote-main' : 'grid')}
               title={oneOnOneMode === 'grid' ? "Kembali ke mode PiP" : "Ubah ke mode Grid (Terbelah)"}
-              className={`p-2.5 sm:p-3 rounded-xl sm:rounded-2xl transition-all duration-300 flex-shrink-0 ${oneOnOneMode === 'grid' ? 'bg-indigo-600 shadow-[0_0_20px_rgba(79,70,229,0.4)]' : 'bg-white/10 hover:bg-white/20'} text-white`}
+              className={`p-2 sm:p-2.5 rounded-lg sm:rounded-xl transition-all duration-300 flex-shrink-0 ${oneOnOneMode === 'grid' ? 'bg-indigo-600 shadow-[0_0_15px_rgba(79,70,229,0.4)]' : 'bg-white/10 hover:bg-white/20'} text-white`}
             >
-              <div className="scale-75 sm:scale-100" dangerouslySetInnerHTML={{ __html: ICONS.layout }} />
+              <div className="scale-75" dangerouslySetInnerHTML={{ __html: ICONS.layout }} />
             </button>
           )}
 
@@ -1353,9 +1358,9 @@ function MyVideoConference({ myName, bandwidthMode, setBandwidthMode, participan
             <button
               onClick={handleToggleBrowserPiP}
               title="Buka Popup Window"
-              className="p-2.5 sm:p-3 rounded-xl sm:rounded-2xl transition-all duration-300 flex-shrink-0 bg-white/10 text-white hover:bg-white/20"
+              className="p-2 sm:p-2.5 rounded-lg sm:rounded-xl transition-all duration-300 flex-shrink-0 bg-white/10 text-white hover:bg-white/20"
             >
-              <div className="scale-75 sm:scale-100" dangerouslySetInnerHTML={{ __html: ICONS.pip }} />
+              <div className="scale-75" dangerouslySetInnerHTML={{ __html: ICONS.pip }} />
             </button>
           )}
 
@@ -1363,29 +1368,29 @@ function MyVideoConference({ myName, bandwidthMode, setBandwidthMode, participan
           <button
             onClick={isRecording ? stopRecording : startRecording}
             title={isRecording ? `Berhenti Merekam (${Math.floor(recordingDuration/60).toString().padStart(2,'0')}:${(recordingDuration%60).toString().padStart(2,'0')})` : 'Rekam Layar'}
-            className={`p-2.5 sm:p-3 rounded-xl sm:rounded-2xl transition-all duration-300 flex-shrink-0 ${
+            className={`p-2 sm:p-2.5 rounded-lg sm:rounded-xl transition-all duration-300 flex-shrink-0 ${
               isRecording
-                ? 'bg-red-500 text-white shadow-[0_0_20px_rgba(239,68,68,0.5)] animate-pulse'
+                ? 'bg-red-500 text-white shadow-[0_0_15px_rgba(239,68,68,0.5)] animate-pulse'
                 : 'bg-white/10 text-white hover:bg-white/20'
             }`}
           >
-            <div className="scale-75 sm:scale-100" dangerouslySetInnerHTML={{ __html: isRecording ? ICONS.recordStop : ICONS.record }} />
+            <div className="scale-75" dangerouslySetInnerHTML={{ __html: isRecording ? ICONS.recordStop : ICONS.record }} />
           </button>
 
           {/* --- DATA SAVER TOGGLE --- */}
           <button
             onClick={toggleDataSaver}
             title={bandwidthMode === 'saver' ? 'Hemat -> HD' : bandwidthMode === 'hd' ? 'HD -> FHD' : 'FHD -> Hemat'}
-            className={`relative p-2.5 sm:p-3 rounded-xl sm:rounded-2xl transition-all duration-300 flex-shrink-0
+            className={`relative p-2 sm:p-2.5 rounded-lg sm:rounded-xl transition-all duration-300 flex-shrink-0
               ${bandwidthMode === 'saver'
-                ? 'bg-emerald-500/90 text-white hover:bg-emerald-400 shadow-[0_0_20px_rgba(16,185,129,0.3)]'
+                ? 'bg-emerald-500/90 text-white hover:bg-emerald-400'
                 : bandwidthMode === 'hd'
-                  ? 'bg-blue-500/90 text-white hover:bg-blue-400 shadow-[0_0_20px_rgba(59,130,246,0.3)]'
-                  : 'bg-purple-500/90 text-white hover:bg-purple-400 shadow-[0_0_20px_rgba(147,51,234,0.3)]'
+                  ? 'bg-blue-500/90 text-white hover:bg-blue-400'
+                  : 'bg-purple-500/90 text-white hover:bg-purple-400'
               }`}
           >
             <div className="flex flex-col items-center gap-0.5">
-              <svg className="w-4 h-4 sm:w-5 sm:h-5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <svg className="w-3.5 h-3.5 sm:w-4 sm:h-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 {bandwidthMode === 'saver' ? (
                   <><path d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z" /><path d="M8 12l3 3 5-6" /></>
                 ) : bandwidthMode === 'hd' ? (
@@ -1400,18 +1405,18 @@ function MyVideoConference({ myName, bandwidthMode, setBandwidthMode, participan
 
           <button
             onClick={() => { setIsChatOpen(!isChatOpen); if (!isChatOpen) setUnreadCount(0); }}
-            className={`relative p-2.5 sm:p-3 rounded-xl sm:rounded-2xl transition-all duration-300 flex-shrink-0 ${isChatOpen ? 'bg-indigo-600 text-white shadow-[0_0_20px_rgba(79,70,229,0.4)]' : 'bg-white/10 text-white hover:bg-white/20'}`}
+            className={`relative p-2 sm:p-2.5 rounded-lg sm:rounded-xl transition-all duration-300 flex-shrink-0 ${isChatOpen ? 'bg-indigo-600 text-white shadow-[0_0_15px_rgba(79,70,229,0.4)]' : 'bg-white/10 text-white hover:bg-white/20'}`}
           >
-            <div className="scale-75 sm:scale-100" dangerouslySetInnerHTML={{ __html: ICONS.chat }} />
+            <div className="scale-75" dangerouslySetInnerHTML={{ __html: ICONS.chat }} />
             {unreadCount > 0 && !isChatOpen && (
               <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full border border-gray-900 animate-bounce">
                 {unreadCount > 9 ? '9+' : unreadCount}
               </span>
             )}
           </button>
-          <div className="w-px h-6 sm:h-8 bg-white/20 mx-0.5 sm:mx-1 flex-shrink-0"></div>
-          <button onClick={leave} className="p-2.5 sm:p-3 rounded-xl sm:rounded-2xl bg-gradient-to-r flex-shrink-0 from-red-600 to-red-500 text-white shadow-lg hover:scale-105 active:scale-95 transition-all">
-            <div className="rotate-[135deg] scale-75 sm:scale-100" dangerouslySetInnerHTML={{ __html: ICONS.hangup }} />
+          <div className="w-px h-5 sm:h-6 bg-white/20 mx-1 flex-shrink-0"></div>
+          <button onClick={leave} className="p-2 sm:p-2.5 rounded-lg sm:rounded-xl bg-gradient-to-r flex-shrink-0 from-red-600 to-red-500 text-white shadow-lg hover:scale-105 active:scale-95 transition-all">
+            <div className="rotate-[135deg] scale-75" dangerouslySetInnerHTML={{ __html: ICONS.hangup }} />
           </button>
         </div>
       </div>
@@ -1423,11 +1428,11 @@ function MyVideoConference({ myName, bandwidthMode, setBandwidthMode, participan
 function OneOnOneLayout({ localTrack, remoteTrack, mode, onSwap }) {
   if (mode === 'grid') {
     return (
-      <div className="flex flex-col md:flex-row w-full h-full gap-4">
-        <div className="flex-1 rounded-2xl overflow-hidden bg-black border border-white/10 shadow-2xl relative">
+      <div className="flex flex-col md:flex-row w-full h-full gap-0.5 sm:gap-1 bg-black">
+        <div className="flex-1 overflow-hidden bg-black relative">
           {localTrack && <ParticipantTile trackRef={localTrack} />}
         </div>
-        <div className="flex-1 rounded-2xl overflow-hidden bg-black border border-white/10 shadow-2xl relative">
+        <div className="flex-1 overflow-hidden bg-black relative">
           {remoteTrack && <ParticipantTile trackRef={remoteTrack} />}
         </div>
       </div>
@@ -1438,8 +1443,8 @@ function OneOnOneLayout({ localTrack, remoteTrack, mode, onSwap }) {
   const miniTrack = mode === 'remote-main' ? localTrack : remoteTrack;
 
   return (
-    <div className="w-full h-full relative rounded-2xl overflow-hidden bg-black border border-white/10 shadow-2xl pip-fullscreen">
-      {mainTrack && <ParticipantTile trackRef={mainTrack} className="w-full h-full" />}
+    <div className="w-full h-full relative overflow-hidden bg-black pip-fullscreen">
+      {mainTrack && <ParticipantTile trackRef={mainTrack} className="w-full h-full object-contain" />}
 
       {/* Mini PiP */}
       {miniTrack && (
@@ -1448,7 +1453,7 @@ function OneOnOneLayout({ localTrack, remoteTrack, mode, onSwap }) {
           className="absolute top-2 right-2 sm:top-4 sm:right-4 w-32 sm:w-36 md:w-64 aspect-video bg-black rounded-xl overflow-hidden border border-white/20 shadow-[0_0_30px_rgba(0,0,0,0.9)] cursor-pointer hover:scale-105 hover:border-white/50 transition-all z-10 duration-300 pip-mini"
           title="Klik untuk menukar layar"
         >
-          <ParticipantTile trackRef={miniTrack} className="w-full h-full" />
+          <ParticipantTile trackRef={miniTrack} className="w-full h-full object-cover" />
         </div>
       )}
     </div>
