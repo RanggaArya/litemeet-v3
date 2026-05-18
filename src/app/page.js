@@ -194,7 +194,7 @@ export default function Home() {
     setConnectionError('');
 
     try {
-      const apiUrl = isDesktopApp ? 'https://litemeet-v3.vercel.app/api/token' : '/api/token';
+      const apiUrl = '/api/token';
       const actualRoomName = password ? `${room}___${password}` : room;
 
       const resp = await fetch(apiUrl, {
@@ -219,7 +219,7 @@ export default function Home() {
       }
     } catch (e) {
       console.error(e);
-      setConnectionError('Terjadi kesalahan koneksi.');
+      setConnectionError(`Koneksi gagal: ${e.message}`);
     } finally {
       setLoading(false);
     }
