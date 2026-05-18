@@ -193,9 +193,12 @@ export default function Home() {
     setConnectionError('');
 
     try {
-      // If this is a retry, first tell server to switch to next key
       if (isRetry) {
-        await fetch('/api/switch-key', { method: 'POST' });
+        await fetch('/api/switch-key', { 
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ room })
+        });
       }
 
       const resp = await fetch('/api/token', {
