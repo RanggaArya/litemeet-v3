@@ -100,35 +100,21 @@ let livekitIndex = 0;
 let pusherIndex = 0;
 let twilioIndex = 0;
 
-// Mapping Room ke Server LiveKit
-// Key: roomName (string), Value: livekitIndex (number)
-const roomKeyMapping = new Map();
-
-// Helpers untuk Room Mapping
-export function getRoomKeyIndex(roomName) {
-  if (roomKeyMapping.has(roomName)) {
-    return roomKeyMapping.get(roomName);
+// Mapping Room ke Server LiveKit sudah DIHAPUS karena tidak kompatibel dengan Serverless.
+// Sebagai gantinya, kita gunakan Deterministic Hashing.
+export function hashRoomName(str) {
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) {
+      const char = str.charCodeAt(i);
+      hash = ((hash << 5) - hash) + char;
+      hash = hash & hash; // Convert to 32bit integer
   }
-  return null;
+  return Math.abs(hash);
 }
-
-export function setRoomKeyIndex(roomName, index) {
-  roomKeyMapping.set(roomName, index);
-  console.log(`[KeyManager] 📍 Room "${roomName}" mapped to LiveKit key #${index}`);
-}
-
-export function clearRoomKeyMapping(roomName) {
-  if (roomKeyMapping.has(roomName)) {
-    roomKeyMapping.delete(roomName);
-    console.log(`[KeyManager] 🗑️ Cleared mapping for room "${roomName}"`);
-  }
-}
-
 
 // --- Round-robin getter: returns current key and advances index ---
+// Masih dipakai untuk Pusher atau fallback, tapi untuk LiveKit Token sekarang pakai Hash
 export function getLivekitKey(index = null) {
-  // Jika diberikan index spesifik (dari mapping), gunakan itu. 
-  // Jika tidak, gunakan livekitIndex global.
   const targetIndex = index !== null ? index : livekitIndex;
   const key = LIVEKIT_KEYS[targetIndex % LIVEKIT_KEYS.length];
   return { ...key, index: targetIndex % LIVEKIT_KEYS.length };
@@ -136,7 +122,6 @@ export function getLivekitKey(index = null) {
 
 export function advanceLivekitKey() {
   livekitIndex = (livekitIndex + 1) % LIVEKIT_KEYS.length;
-  console.log(`[KeyManager] 🔄 Switched to LiveKit key #${livekitIndex} → ${LIVEKIT_KEYS[livekitIndex].apiKey}`);
   return getLivekitKey();
 }
 

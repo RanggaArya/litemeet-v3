@@ -434,14 +434,11 @@ export default function App() {
     if (!room || !name) { alert('Mohon isi Nama Room dan Nama Anda!'); return; }
     setLoading(true); setConnectionError('');
     try {
-      if (isRetry) {
-        await fetch(`${API_BASE}/api/switch-key`, { 
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ room })
-        });
-      }
-      const resp = await fetch(`${API_BASE}/api/token`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ room, username: name }) });
+      const resp = await fetch(`${API_BASE}/api/token`, { 
+        method: 'POST', 
+        headers: { 'Content-Type': 'application/json' }, 
+        body: JSON.stringify({ room, username: name, retryCount: retryCountRef.current }) 
+      });
       const data = await resp.json();
       if (data.token && data.serverUrl) {
         setToken(data.token); setServerUrl(data.serverUrl); setJoined(true);

@@ -193,18 +193,15 @@ export default function Home() {
     setConnectionError('');
 
     try {
-      if (isRetry) {
-        await fetch('/api/switch-key', { 
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ room })
-        });
-      }
+      // Tentukan base URL: Jika Desktop, tembak langsung ke Vercel agar tersentral.
+      // Jika Web, biarkan pakai relative path (/api/token).
+      const apiUrl = isDesktopApp ? 'https://litemeet-v3.vercel.app/api/token' : '/api/token';
 
-      const resp = await fetch('/api/token', {
+      const resp = await fetch(apiUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ room, username: name }),
+        // Kirim retryCount (jika isRetry true, kita ambil dari ref yang sudah ditambah di handleDisconnected)
+        body: JSON.stringify({ room, username: name, retryCount: retryCountRef.current }),
       });
       const data = await resp.json();
 
