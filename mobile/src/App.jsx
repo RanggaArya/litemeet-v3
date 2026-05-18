@@ -1,8 +1,75 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import { registerPlugin } from '@capacitor/core';
 import { LiveKitRoom, GridLayout, ParticipantTile, RoomAudioRenderer, useTracks, useLocalParticipant, useRemoteParticipants, useRoomContext, useChat } from '@livekit/components-react';
 import '@livekit/components-styles';
 import { Track, RoomEvent } from 'livekit-client';
 import { API_BASE, ICONS, BANDWIDTH_MODES, buildRoomOptions, loadHistory, saveHistory, addHistoryEntry, loadLastUser, saveLastUser, formatDuration, formatDate } from './constants';
+
+// Capacitor plugin bridge untuk ForegroundService native
+const ForegroundCall = registerPlugin('ForegroundCall');
+const isAndroid = () => typeof window !== 'undefined' && window.Capacitor?.getPlatform() === 'android';
+
+// ============ DRAGGABLE PiP (video kecil pojok) ============
+function DraggablePip({ trackRef }) {
+  const pipRef = useRef(null);
+  const [pos, setPos] = useState({ x: 0, y: 0 });
+  const drag = useRef({ active: false, startX: 0, startY: 0, origX: 0, origY: 0 });
+
+  const onTouchStart = (e) => {
+    const t = e.touches[0];
+    drag.current = { active: true, startX: t.clientX, startY: t.clientY, origX: pos.x, origY: pos.y };
+  };
+  const onTouchMove = (e) => {
+    if (!drag.current.active) return;
+    e.preventDefault();
+    const t = e.touches[0];
+    setPos({ x: drag.current.origX + (t.clientX - drag.current.startX), y: drag.current.origY + (t.clientY - drag.current.startY) });
+  };
+  const onTouchEnd = () => { drag.current.active = false; };
+
+  return (
+    <div
+      ref={pipRef}
+      className="pip-self"
+      style={{ transform: `translate(${pos.x}px, ${pos.y}px)` }}
+      onTouchStart={onTouchStart}
+      onTouchMove={onTouchMove}
+      onTouchEnd={onTouchEnd}
+    >
+      <ParticipantTile trackRef={trackRef} />
+    </div>
+  );
+}
+
+// ============ SMART VIDEO LAYOUT ============
+// 2 orang: spotlight besar + PiP kecil pojok kanan atas
+// 3+ orang: grid biasa
+function SmartVideoLayout({ tracks, remoteCount }) {
+  const { localParticipant } = useLocalParticipant();
+  const totalPeople = remoteCount + 1;
+
+  if (totalPeople >= 3) {
+    return <GridLayout tracks={tracks} style={{ height: '100%' }}><ParticipantTile /></GridLayout>;
+  }
+
+  // Pisahkan track lokal vs remote berdasarkan isLocal
+  const localTrack = tracks.find(t => t.participant?.isLocal && (t.source === Track.Source.Camera || t.publication?.source === Track.Source.Camera));
+  const remoteTrack = tracks.find(t => !t.participant?.isLocal && (t.source === Track.Source.Camera || t.publication?.source === Track.Source.Camera || t.source === Track.Source.ScreenShare));
+
+  return (
+    <div className="spotlight-layout">
+      <div className="spotlight-main">
+        {remoteTrack
+          ? <ParticipantTile trackRef={remoteTrack} />
+          : localTrack
+            ? <ParticipantTile trackRef={localTrack} />
+            : <div className="waiting-room"><div className="waiting-icon">👥</div><p>Menunggu peserta lain bergabung...</p></div>
+        }
+      </div>
+      {remoteTrack && localTrack && <DraggablePip trackRef={localTrack} />}
+    </div>
+  );
+}
 
 // ===================== MEETING COMPONENT =====================
 function MeetingView({ myName, bandwidthMode, setBandwidthMode, participantsRef, saveMeetingToHistory, onLeave }) {
@@ -22,14 +89,12 @@ function MeetingView({ myName, bandwidthMode, setBandwidthMode, participantsRef,
   const [facingMode, setFacingMode] = useState('user');
   const [isRecording, setIsRecording] = useState(false);
   const [recordingDuration, setRecordingDuration] = useState(0);
+  const [isPipMode, setIsPipMode] = useState(false);
   const mediaRecorderRef = useRef(null);
   const recordedChunksRef = useRef([]);
   const recordingTimerRef = useRef(null);
   const [chatInput, setChatInput] = useState('');
   const chatEndRef = useRef(null);
-
-  const screenTracks = useTracks([Track.Source.ScreenShare], { onlySubscribed: true });
-  const cameraTracks = useTracks([{ source: Track.Source.Camera, withPlaceholder: true }], { onlySubscribed: false });
 
   const addToast = useCallback((msg, type = 'success') => {
     const id = Date.now();
@@ -52,6 +117,13 @@ function MeetingView({ myName, bandwidthMode, setBandwidthMode, participantsRef,
     room.on(RoomEvent.ParticipantDisconnected, onLeft);
     return () => { room.off(RoomEvent.ParticipantConnected, onJoin); room.off(RoomEvent.ParticipantDisconnected, onLeft); };
   }, [room, addToast]);
+
+  // Dengarkan event PiP dari Android native
+  useEffect(() => {
+    const handler = (e) => setIsPipMode(!!e.detail?.isPip);
+    window.addEventListener('pipModeChanged', handler);
+    return () => window.removeEventListener('pipModeChanged', handler);
+  }, []);
 
   // Duration timer
   useEffect(() => {
@@ -85,41 +157,93 @@ function MeetingView({ myName, bandwidthMode, setBandwidthMode, participantsRef,
 
   const toggleMic = async () => { await localParticipant.setMicrophoneEnabled(isMuted); };
   const toggleCam = async () => { await localParticipant.setCameraEnabled(isCamOff); };
+
   const toggleScreen = async () => {
-    try { await localParticipant.setScreenShareEnabled(!isSharing); } catch (e) { console.warn(e); }
+    if (isAndroid()) { addToast('Screen share tidak tersedia di Android', 'error'); return; }
+    try { await localParticipant.setScreenShareEnabled(!isSharing); }
+    catch (e) { console.warn(e); addToast('Screen share gagal', 'error'); }
   };
 
   const flipCamera = async () => {
-    const newMode = facingMode === 'user' ? 'environment' : 'user';
-    setFacingMode(newMode);
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { exact: newMode } } });
-      const track = stream.getVideoTracks()[0];
-      await localParticipant.setCameraEnabled(false);
-      await localParticipant.publishTrack(track, { source: Track.Source.Camera });
-    } catch (e) { console.warn('Flip camera failed:', e); setFacingMode(facingMode); }
+      const newMode = facingMode === 'user' ? 'environment' : 'user';
+      // Gunakan restartTrack — cara paling reliable di Android WebView
+      const camPub = localParticipant.getTrackPublication(Track.Source.Camera);
+      if (camPub?.track) {
+        await camPub.track.restartTrack({ facingMode: newMode });
+        setFacingMode(newMode);
+        addToast(`Kamera ${newMode === 'user' ? 'depan' : 'belakang'} aktif`, 'success');
+      } else {
+        // Fallback: matikan lalu nyalakan ulang kamera
+        await localParticipant.setCameraEnabled(false);
+        await new Promise(r => setTimeout(r, 500));
+        await localParticipant.setCameraEnabled(true, { facingMode: newMode });
+        setFacingMode(newMode);
+        addToast(`Kamera ${newMode === 'user' ? 'depan' : 'belakang'} aktif`, 'success');
+      }
+    } catch (e) {
+      console.warn('Flip camera failed:', e);
+      // Fallback kedua: restart paksa
+      try {
+        const newMode = facingMode === 'user' ? 'environment' : 'user';
+        await localParticipant.setCameraEnabled(false);
+        await new Promise(r => setTimeout(r, 500));
+        await localParticipant.setCameraEnabled(true, { facingMode: newMode });
+        setFacingMode(newMode);
+        addToast(`Kamera ${newMode === 'user' ? 'depan' : 'belakang'} aktif`, 'success');
+      } catch (e2) { addToast('Gagal flip kamera', 'error'); }
+    }
   };
 
-  // Recording
+  // Recording — rekam stream lokal (support Android WebView)
   const startRecording = async () => {
     try {
-      const stream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true });
-      const mime = MediaRecorder.isTypeSupported('video/webm;codecs=vp9') ? 'video/webm;codecs=vp9' : 'video/webm';
-      const mr = new MediaRecorder(stream, { mimeType: mime });
+      const mediaTracks = [];
+      // Ambil semua track dari LocalParticipant
+      const trackPubs = localParticipant.getTrackPublications();
+      for (const pub of trackPubs.values()) {
+        const mst = pub?.track?.mediaStreamTrack;
+        if (mst && mst.readyState === 'live') {
+          mediaTracks.push(mst.clone());
+        }
+      }
+      // Fallback: coba ambil langsung dari audioTracks/videoTracks
+      if (mediaTracks.length === 0) {
+        const camPub = localParticipant.getTrackPublication(Track.Source.Camera);
+        const micPub = localParticipant.getTrackPublication(Track.Source.Microphone);
+        if (camPub?.track?.mediaStreamTrack) mediaTracks.push(camPub.track.mediaStreamTrack.clone());
+        if (micPub?.track?.mediaStreamTrack) mediaTracks.push(micPub.track.mediaStreamTrack.clone());
+      }
+      if (mediaTracks.length === 0) { addToast('Tidak ada stream untuk direkam. Pastikan kamera/mic aktif.', 'error'); return; }
+      const stream = new MediaStream(mediaTracks);
+      // Coba berbagai MIME type yang didukung Android WebView
+      const mimeOptions = ['video/webm;codecs=vp8,opus', 'video/webm;codecs=vp8', 'video/webm', 'audio/webm;codecs=opus', 'audio/webm', ''];
+      let mime = '';
+      for (const m of mimeOptions) {
+        if (!m || (typeof MediaRecorder.isTypeSupported === 'function' && MediaRecorder.isTypeSupported(m))) { mime = m; break; }
+      }
+      const mrOptions = mime ? { mimeType: mime } : {};
+      const mr = new MediaRecorder(stream, mrOptions);
       recordedChunksRef.current = [];
-      mr.ondataavailable = (e) => { if (e.data.size > 0) recordedChunksRef.current.push(e.data); };
+      mr.ondataavailable = (e) => { if (e.data?.size > 0) recordedChunksRef.current.push(e.data); };
+      mr.onerror = (e) => { console.warn('MediaRecorder error:', e); addToast('Error saat merekam', 'error'); };
       mr.onstop = () => {
-        const blob = new Blob(recordedChunksRef.current, { type: mime });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a'); a.href = url;
-        a.download = `LiteMeet_${new Date().toISOString().slice(0,16).replace(/[:-]/g,'')}.webm`;
-        a.click(); URL.revokeObjectURL(url);
+        try {
+          if (recordedChunksRef.current.length === 0) { addToast('Rekaman kosong', 'error'); return; }
+          const blob = new Blob(recordedChunksRef.current, { type: mime || 'video/webm' });
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a'); a.href = url;
+          a.download = `LiteMeet_${new Date().toISOString().slice(0,16).replace(/[:-]/g,'')}.webm`;
+          document.body.appendChild(a); a.click(); document.body.removeChild(a);
+          setTimeout(() => URL.revokeObjectURL(url), 5000);
+        } catch (err) { console.warn('Save recording error:', err); }
+        stream.getTracks().forEach(t => t.stop());
       };
       mr.start(1000); mediaRecorderRef.current = mr;
       setIsRecording(true); setRecordingDuration(0);
       recordingTimerRef.current = setInterval(() => setRecordingDuration(p => p + 1), 1000);
-      stream.getVideoTracks()[0].onended = () => stopRecording();
-    } catch (e) { console.warn('Recording failed:', e); }
+      addToast('Rekaman dimulai 🔴', 'success');
+    } catch (e) { console.warn('Recording failed:', e); addToast('Gagal merekam: ' + (e.message || e), 'error'); }
   };
 
   const stopRecording = () => {
@@ -141,7 +265,38 @@ function MeetingView({ myName, bandwidthMode, setBandwidthMode, participantsRef,
     send(chatInput.trim()); setChatInput('');
   };
 
-  const tracks = screenTracks.length > 0 ? [...screenTracks, ...cameraTracks] : cameraTracks;
+  // Bandwidth monitor
+  const [bwStats, setBwStats] = useState({ upload: 0, download: 0 });
+  const prevBytesRef = useRef({ sent: 0, received: 0, timestamp: 0 });
+  useEffect(() => {
+    if (!room) return;
+    const iv = setInterval(async () => {
+      try {
+        let totalSent = 0, totalRecv = 0;
+        const pub = room.engine?.pcManager?.publisher?.getStats?.();
+        const sub = room.engine?.pcManager?.subscriber?.getStats?.();
+        if (pub) { (await pub).forEach(r => { if (r.type === 'transport') { totalSent += r.bytesSent || 0; totalRecv += r.bytesReceived || 0; } }); }
+        if (sub) { (await sub).forEach(r => { if (r.type === 'transport') { totalSent += r.bytesSent || 0; totalRecv += r.bytesReceived || 0; } }); }
+        const now = Date.now(), prev = prevBytesRef.current;
+        if (prev.timestamp > 0) { const el = (now - prev.timestamp) / 1000; if (el > 0) setBwStats({ upload: Math.round(Math.max(0, (totalSent - prev.sent) / 1024 / el)), download: Math.round(Math.max(0, (totalRecv - prev.received) / 1024 / el)) }); }
+        prevBytesRef.current = { sent: totalSent, received: totalRecv, timestamp: now };
+      } catch {}
+    }, 2000);
+    return () => clearInterval(iv);
+  }, [room]);
+
+  const screenTracks = useTracks([Track.Source.ScreenShare], { onlySubscribed: true });
+  const cameraTracks = useTracks([{ source: Track.Source.Camera, withPlaceholder: true }], { onlySubscribed: false });
+  const allTracks = screenTracks.length > 0 ? [...screenTracks, ...cameraTracks] : cameraTracks;
+
+  // Saat PiP mode: sembunyikan semua UI, hanya tampilkan video
+  if (isPipMode) {
+    return (
+      <div className="meeting-room pip-active">
+        <SmartVideoLayout tracks={allTracks} remoteCount={remoteParticipants.length} />
+      </div>
+    );
+  }
 
   return (
     <div className="meeting-room">
@@ -152,12 +307,18 @@ function MeetingView({ myName, bandwidthMode, setBandwidthMode, participantsRef,
 
       {/* Top bar */}
       <div className="top-bar">
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
           {isRecording && (
             <div className="rec-indicator"><div className="rec-dot" /><span>{String(Math.floor(recordingDuration/60)).padStart(2,'0')}:{String(recordingDuration%60).padStart(2,'0')}</span></div>
           )}
           <div className="top-bar-pill" style={{ background: 'rgba(99,102,241,0.15)', color: '#818cf8' }}>
             ⏱ {durationStr}
+          </div>
+          <div className="top-bar-pill" style={{ background: bandwidthMode === 'saver' ? 'rgba(16,185,129,0.15)' : 'rgba(59,130,246,0.15)', color: bandwidthMode === 'saver' ? '#34d399' : '#60a5fa', fontSize: 9 }}>
+            <span style={{ width: 5, height: 5, borderRadius: '50%', background: bandwidthMode === 'saver' ? '#34d399' : '#60a5fa', display: 'inline-block', animation: 'recording-pulse 2s infinite' }} />
+            {bandwidthMode === 'saver' ? 'HEMAT' : 'HD'}
+            <span style={{ color: '#93c5fd' }}> ↑{bwStats.upload}</span>
+            <span style={{ color: '#6ee7b7' }}> ↓{bwStats.download}</span>
           </div>
         </div>
         <div className="top-bar-pill" style={{ background: 'rgba(255,255,255,0.06)', color: '#9ca3af', fontSize: 10 }}>
@@ -165,11 +326,9 @@ function MeetingView({ myName, bandwidthMode, setBandwidthMode, participantsRef,
         </div>
       </div>
 
-      {/* Video */}
+      {/* Smart Video Layout — PiP untuk 2 orang, Grid untuk 3+ */}
       <div className="video-area">
-        <GridLayout tracks={tracks} style={{ height: '100%' }}>
-          <ParticipantTile />
-        </GridLayout>
+        <SmartVideoLayout tracks={allTracks} remoteCount={remoteParticipants.length} />
       </div>
 
       {/* More menu */}
@@ -283,11 +442,8 @@ export default function App() {
         retryCountRef.current = 0; userLeftRef.current = false;
         meetingStartRef.current = Date.now(); participantsRef.current = new Set();
         saveLastUser(room, name);
-        // Start foreground service for background call
-        try {
-          const { ForegroundService } = await import('@capawesome-team/capacitor-android-foreground-service');
-          await ForegroundService.startForegroundService({ id: 1, title: 'LiteMeet', body: `Panggilan aktif: ${room}`, smallIcon: 'ic_stat_videocam' });
-        } catch (e) { /* not on native */ }
+        // Mulai foreground service agar panggilan tetap aktif di background
+        try { await ForegroundCall.startCall({ roomName: room }); } catch (e) { console.warn('FG service:', e); }
       } else { setConnectionError(data.error || 'Gagal mendapatkan token.'); }
     } catch (e) { setConnectionError('Koneksi ke server gagal.'); }
     finally { setLoading(false); }
@@ -302,8 +458,8 @@ export default function App() {
   }, [room, name]);
 
   const handleDisconnected = useCallback(async () => {
-    // Stop foreground service
-    try { const { ForegroundService } = await import('@capawesome-team/capacitor-android-foreground-service'); await ForegroundService.stopForegroundService(); } catch (e) {}
+    // Hentikan foreground service
+    try { await ForegroundCall.stopCall(); } catch (e) { console.warn('Stop FG service:', e); }
     if (userLeftRef.current) { setJoined(false); setToken(''); setServerUrl(''); return; }
     if (retryCountRef.current < MAX_RETRIES) {
       retryCountRef.current++; setJoined(false); setToken(''); setServerUrl('');

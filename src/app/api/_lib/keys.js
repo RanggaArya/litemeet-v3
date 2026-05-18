@@ -100,10 +100,38 @@ let livekitIndex = 0;
 let pusherIndex = 0;
 let twilioIndex = 0;
 
+// Mapping Room ke Server LiveKit
+// Key: roomName (string), Value: livekitIndex (number)
+const roomKeyMapping = new Map();
+
+// Helpers untuk Room Mapping
+export function getRoomKeyIndex(roomName) {
+  if (roomKeyMapping.has(roomName)) {
+    return roomKeyMapping.get(roomName);
+  }
+  return null;
+}
+
+export function setRoomKeyIndex(roomName, index) {
+  roomKeyMapping.set(roomName, index);
+  console.log(`[KeyManager] 📍 Room "${roomName}" mapped to LiveKit key #${index}`);
+}
+
+export function clearRoomKeyMapping(roomName) {
+  if (roomKeyMapping.has(roomName)) {
+    roomKeyMapping.delete(roomName);
+    console.log(`[KeyManager] 🗑️ Cleared mapping for room "${roomName}"`);
+  }
+}
+
+
 // --- Round-robin getter: returns current key and advances index ---
-export function getLivekitKey() {
-  const key = LIVEKIT_KEYS[livekitIndex % LIVEKIT_KEYS.length];
-  return { ...key, index: livekitIndex % LIVEKIT_KEYS.length };
+export function getLivekitKey(index = null) {
+  // Jika diberikan index spesifik (dari mapping), gunakan itu. 
+  // Jika tidak, gunakan livekitIndex global.
+  const targetIndex = index !== null ? index : livekitIndex;
+  const key = LIVEKIT_KEYS[targetIndex % LIVEKIT_KEYS.length];
+  return { ...key, index: targetIndex % LIVEKIT_KEYS.length };
 }
 
 export function advanceLivekitKey() {

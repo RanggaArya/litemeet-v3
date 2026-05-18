@@ -7,7 +7,7 @@
   },
   "plugins": {
     "ForegroundService": {
-      "smallIcon": "ic_stat_videocam",
+      "smallIcon": "ic_launcher",
       "buttons": []
     }
   },
