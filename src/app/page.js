@@ -414,15 +414,6 @@ export default function Home() {
 
         {/* Version info */}
         <div className="absolute bottom-3 right-4 z-10 text-[9px] text-gray-400/60 font-mono">App Version 0.1.0</div>
-
-        <style jsx>{`
-          @keyframes float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-5px); } }
-          @keyframes slideUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
-          @keyframes shine { 100% { left: 125%; } }
-          .animate-float { animation: float 3s ease-in-out infinite; }
-          .animate-slide-up { animation: slideUp 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
-          .animate-shine { animation: shine 2.5s infinite cubic-bezier(0.4, 0, 0.2, 1); }
-        `}</style>
       </div>
     );
   }
