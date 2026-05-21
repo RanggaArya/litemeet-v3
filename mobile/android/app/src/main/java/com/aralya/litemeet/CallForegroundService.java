@@ -76,8 +76,10 @@ public class CallForegroundService extends Service {
             .setSmallIcon(android.R.drawable.ic_menu_call)
             .setOngoing(true)
             .setCategory(NotificationCompat.CATEGORY_CALL)
-            .setPriority(NotificationCompat.PRIORITY_LOW)
+            .setPriority(NotificationCompat.PRIORITY_MAX)
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+            .setColor(0xFF25D366) // Hijau ala WhatsApp
+            .setColorized(true)
             .setContentIntent(pendingOpen)
             .addAction(android.R.drawable.ic_menu_close_clear_cancel, "Akhiri", pendingStop)
             .build();
@@ -125,7 +127,7 @@ public class CallForegroundService extends Service {
             NotificationChannel channel = new NotificationChannel(
                 CHANNEL_ID,
                 "Panggilan LiteMeet",
-                NotificationManager.IMPORTANCE_LOW
+                NotificationManager.IMPORTANCE_HIGH
             );
             channel.setDescription("Notifikasi panggilan aktif LiteMeet");
             channel.setSound(null, null);
