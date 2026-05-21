@@ -19,7 +19,7 @@ export const ICONS = {
 export const BANDWIDTH_MODES = {
   saver: {
     label: 'Hemat', icon: '📶',
-    resolution: VideoPresets.h360.resolution, maxBitrate: 200_000, maxFramerate: 15,
+    resolution: VideoPresets.h360.resolution, maxBitrate: 200_000, maxFramerate: 24,
     screenShareBitrate: 300_000, screenShareFps: 10,
     simulcastLayers: [VideoPresets.h90, VideoPresets.h180],
   },

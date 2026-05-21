@@ -45,7 +45,7 @@ const BANDWIDTH_MODES = {
     icon: '📶',
     resolution: VideoPresets.h360.resolution,
     maxBitrate: 200_000,
-    maxFramerate: 15,
+    maxFramerate: 24,
     screenShareBitrate: 300_000,
     screenShareFps: 10,
     simulcastLayers: [VideoPresets.h90, VideoPresets.h180],
@@ -169,7 +169,7 @@ export default function Home() {
   const [serverUrl, setServerUrl] = useState('');
   const [joined, setJoined] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [bandwidthMode, setBandwidthMode] = useState('saver'); // default hemat
+  const [bandwidthMode, setBandwidthMode] = useState('hd'); // default hd for smoother video
   const [connectionError, setConnectionError] = useState('');
   const retryCountRef = useRef(0);
   const userInitiatedLeaveRef = useRef(false);

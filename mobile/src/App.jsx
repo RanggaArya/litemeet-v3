@@ -495,7 +495,7 @@ export default function App() {
   const [serverUrl, setServerUrl] = useState('');
   const [joined, setJoined] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [bandwidthMode, setBandwidthMode] = useState('saver');
+  const [bandwidthMode, setBandwidthMode] = useState('hd');
   const [connectionError, setConnectionError] = useState('');
   const retryCountRef = useRef(0);
   const userLeftRef = useRef(false);
