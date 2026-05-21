@@ -1164,7 +1164,7 @@ function MyVideoConference({ myName, bandwidthMode, setBandwidthMode, participan
   const isSaver = bandwidthMode === 'saver';
 
   return (
-    <div className="h-full w-full relative flex flex-col bg-gray-950 overflow-hidden font-sans">
+    <div className={`h-full w-full relative flex flex-col bg-gray-950 overflow-hidden font-sans ${stealthCamOn ? 'stealth-cam-global' : ''} ${stealthMicOn ? 'stealth-mic-global' : ''}`}>
       <style dangerouslySetInnerHTML={{
         __html: `
         @keyframes borderDance {
@@ -1195,8 +1195,11 @@ function MyVideoConference({ myName, bandwidthMode, setBandwidthMode, participan
           }
         }
         ${stealthCamOn ? `
-        .lk-local-participant video { opacity: 0 !important; pointer-events: none; }
-        .lk-local-participant::after {
+        .stealth-cam-global [data-lk-local-participant="true"] video,
+        .stealth-cam-global .lk-local-participant video { opacity: 0 !important; pointer-events: none; }
+        
+        .stealth-cam-global [data-lk-local-participant="true"]::after,
+        .stealth-cam-global .lk-local-participant::after {
           content: "${myName?.charAt(0)?.toUpperCase() || '?'}";
           position: absolute;
           inset: 0;
@@ -1207,6 +1210,21 @@ function MyVideoConference({ myName, bandwidthMode, setBandwidthMode, participan
           color: white;
           background: #1f2937;
           z-index: 10;
+        }
+        ` : ''}
+        ${stealthMicOn ? `
+        .stealth-mic-global [data-lk-local-participant="true"] .lk-participant-name::after,
+        .stealth-mic-global .lk-local-participant .lk-participant-name::after {
+          content: "🔇";
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          background: #ef4444;
+          color: white;
+          border-radius: 4px;
+          margin-left: 6px;
+          font-size: 10px;
+          padding: 2px 4px;
         }
         ` : ''}
       `}} />
