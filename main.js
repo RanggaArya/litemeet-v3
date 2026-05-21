@@ -39,7 +39,8 @@ async function createWindow() {
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       nodeIntegration: false,
-      contextIsolation: true
+      contextIsolation: true,
+      backgroundThrottling: false, // Keep WebRTC media alive when window loses focus
     }
   });
 
@@ -170,26 +171,40 @@ async function createWindow() {
   }
 
   // --- AUTO PIP LOGIC ---
+  let pipTimeout = null;
   mainWindow.on('blur', () => {
     if (inMeeting && mainWindow) {
       const bounds = mainWindow.getBounds();
       // Only shrink if it's not already in PiP mode (e.g. width > 400)
       if (bounds.width > 400) {
-        mainWindow.setAlwaysOnTop(true, 'floating', 1);
-        mainWindow.setMinimumSize(150, 100);
-        
-        const { width } = screen.getPrimaryDisplay().workAreaSize;
-        const pipWidth = 302;
-        const pipHeight = 189;
-        
-        // Mengecil ke pojok kanan atas
-        mainWindow.setBounds({
-          x: width - pipWidth - 20,
-          y: 20,
-          width: pipWidth,
-          height: pipHeight
-        }, true);
+        // Add a delay to prevent accidental PiP triggers that kill media tracks
+        pipTimeout = setTimeout(() => {
+          if (!mainWindow.isFocused()) {
+            mainWindow.setAlwaysOnTop(true, 'floating', 1);
+            mainWindow.setMinimumSize(150, 100);
+            
+            const { width } = screen.getPrimaryDisplay().workAreaSize;
+            const pipWidth = 302;
+            const pipHeight = 189;
+            
+            // Mengecil ke pojok kanan atas
+            mainWindow.setBounds({
+              x: width - pipWidth - 20,
+              y: 20,
+              width: pipWidth,
+              height: pipHeight
+            }, true);
+          }
+        }, 800); // 800ms delay — prevents flash-minimize from killing tracks
       }
+    }
+  });
+
+  mainWindow.on('focus', () => {
+    // Cancel pending PiP if user quickly returns
+    if (pipTimeout) {
+      clearTimeout(pipTimeout);
+      pipTimeout = null;
     }
   });
 

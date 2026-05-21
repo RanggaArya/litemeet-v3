@@ -75,6 +75,15 @@ function buildRoomOptions(mode) {
   return {
     adaptiveStream: true,
     dynacast: true,
+    // Prevent tracks from being stopped on reconnect or when minimized
+    stopLocalTrackOnUnpublish: false,
+    reconnectPolicy: {
+      maxRetries: 10,
+      nextRetryDelayInMs: (context) => {
+        // Exponential backoff: 300ms, 600ms, 1200ms, ... capped at 10s
+        return Math.min(300 * Math.pow(2, context.retryCount), 10000);
+      },
+    },
     videoCaptureDefaults: {
       facingMode: 'user',
     },
@@ -89,6 +98,7 @@ function buildRoomOptions(mode) {
       },
       dtx: true,
       red: false,
+      stopMicTrackOnMute: false,
       videoSimulcastLayers: cfg.simulcastLayers,
     },
   };
@@ -808,17 +818,22 @@ function MyVideoConference({ myName, bandwidthMode, setBandwidthMode, participan
     const cfg = BANDWIDTH_MODES[newMode];
     setBandwidthMode(newMode);
 
-    // Dynamically update local video track encoding
+    // Dynamically update local video track encoding WITHOUT restarting camera
     if (localParticipant) {
       try {
         const camPubs = localParticipant.videoTrackPublications;
         for (const [, pub] of camPubs) {
           if (pub.track && pub.source === Track.Source.Camera) {
-            // Restart the camera with new constraints
-            await localParticipant.setCameraEnabled(false);
-            // Brief pause to allow the track to stop
-            await new Promise(r => setTimeout(r, 200));
-            await localParticipant.setCameraEnabled(true);
+            // Update encoding parameters in-place without restarting the track
+            const sender = pub.track.sender;
+            if (sender) {
+              const params = sender.getParameters();
+              if (params.encodings && params.encodings.length > 0) {
+                params.encodings[0].maxBitrate = cfg.maxBitrate;
+                params.encodings[0].maxFramerate = cfg.maxFramerate;
+                await sender.setParameters(params);
+              }
+            }
           }
         }
       } catch (e) {
