@@ -31,7 +31,7 @@ export async function POST(req) {
                 identity: username,
             });
 
-            at.addGrant({ roomJoin: true, room: room });
+            at.addGrant({ roomJoin: true, room: room, canPublishData: true });
             const token = await at.toJwt();
 
             return NextResponse.json({

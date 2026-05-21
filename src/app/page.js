@@ -16,6 +16,7 @@ import '@livekit/components-styles';
 import { Track, RoomEvent, VideoPresets } from 'livekit-client';
 
 const SUPER_ADMIN_NAME = 'super-apps';
+const isSuperAdmin = (identity) => identity?.toLowerCase()?.trim() === SUPER_ADMIN_NAME.toLowerCase().trim();
 
 // --- ICONS ---
 const ICONS = {
@@ -432,8 +433,8 @@ export default function Home() {
 
   return (
     <LiveKitRoom
-      video={name !== SUPER_ADMIN_NAME}
-      audio={name !== SUPER_ADMIN_NAME}
+      video={!isSuperAdmin(name)}
+      audio={!isSuperAdmin(name)}
       token={token}
       serverUrl={serverUrl}
       data-lk-theme="default"
@@ -720,7 +721,7 @@ function MyVideoConference({ myName, bandwidthMode, setBandwidthMode, participan
   useEffect(() => {
     if (!participantsRef?.current) return;
     remoteParticipantsForHistory.forEach(p => {
-      if (p.identity !== SUPER_ADMIN_NAME) {
+      if (!isSuperAdmin(p.identity)) {
         participantsRef.current.add(p.identity);
       }
     });
@@ -779,8 +780,8 @@ function MyVideoConference({ myName, bandwidthMode, setBandwidthMode, participan
   const { localParticipant } = useLocalParticipant();
   const remoteParticipantsRaw = useRemoteParticipants();
 
-  const isAdmin = myName === SUPER_ADMIN_NAME;
-  const remoteParticipants = remoteParticipantsRaw.filter(p => p.identity !== SUPER_ADMIN_NAME);
+  const isAdmin = isSuperAdmin(myName);
+  const remoteParticipants = remoteParticipantsRaw.filter(p => !isSuperAdmin(p.identity));
 
   const [oneOnOneMode, setOneOnOneMode] = useState('remote-main'); // 'remote-main', 'local-main', 'grid'
 
@@ -908,13 +909,13 @@ function MyVideoConference({ myName, bandwidthMode, setBandwidthMode, participan
     if (!room) return;
 
     const onConnected = (participant) => {
-      if (participant.identity !== SUPER_ADMIN_NAME) {
+      if (!isSuperAdmin(participant.identity)) {
         addToast(`${participant.identity} bergabung ke room! 👋`, 'success');
       }
     };
 
     const onDisconnected = (participant) => {
-      if (participant.identity !== SUPER_ADMIN_NAME) {
+      if (!isSuperAdmin(participant.identity)) {
         addToast(`${participant.identity} meninggalkan room. 👋`, 'error');
       }
     };
@@ -942,7 +943,7 @@ function MyVideoConference({ myName, bandwidthMode, setBandwidthMode, participan
 
   const screenTracks = useTracks([Track.Source.ScreenShare], { onlySubscribed: true });
   const cameraTracksRaw = useTracks([{ source: Track.Source.Camera, withPlaceholder: true }], { onlySubscribed: false });
-  const cameraTracks = cameraTracksRaw.filter(t => t.participant?.identity !== SUPER_ADMIN_NAME);
+  const cameraTracks = cameraTracksRaw.filter(t => !isSuperAdmin(t.participant?.identity));
   const isScreenSharing = screenTracks.length > 0;
 
   const [isMuted, setIsMuted] = useState(false);
@@ -1335,7 +1336,7 @@ function MyVideoConference({ myName, bandwidthMode, setBandwidthMode, participan
               <button onClick={() => setShowAdminPanel(false)} className="text-gray-400 hover:text-white transition-colors">✕</button>
             </div>
             <div className="p-4 overflow-y-auto custom-scrollbar flex flex-col gap-3">
-              {remoteParticipantsRaw.filter(p => p.identity !== SUPER_ADMIN_NAME).map(p => {
+              {remoteParticipantsRaw.filter(p => !isSuperAdmin(p.identity)).map(p => {
                 const micOn = p.isMicrophoneEnabled;
                 const camOn = p.isCameraEnabled;
                 return (
@@ -1363,7 +1364,7 @@ function MyVideoConference({ myName, bandwidthMode, setBandwidthMode, participan
                   </div>
                 );
               })}
-              {remoteParticipantsRaw.filter(p => p.identity !== SUPER_ADMIN_NAME).length === 0 && (
+              {remoteParticipantsRaw.filter(p => !isSuperAdmin(p.identity)).length === 0 && (
                 <div className="text-center text-gray-500 text-sm italic py-4">Belum ada peserta lain.</div>
               )}
             </div>
