@@ -35,11 +35,16 @@ export function buildRoomOptions(mode) {
   const cfg = BANDWIDTH_MODES[mode];
   return {
     adaptiveStream: true, dynacast: true,
+    stopLocalTrackOnUnpublish: false,
+    reconnectPolicy: {
+      maxRetries: 10,
+      nextRetryDelayInMs: (context) => Math.min(300 * Math.pow(2, context.retryCount), 10000),
+    },
     videoCaptureDefaults: { facingMode: 'user' },
     publishDefaults: {
       videoEncoding: { maxBitrate: cfg.maxBitrate, maxFramerate: cfg.maxFramerate },
       screenShareEncoding: { maxBitrate: cfg.screenShareBitrate, maxFramerate: cfg.screenShareFps },
-      dtx: true, red: false, videoSimulcastLayers: cfg.simulcastLayers,
+      dtx: true, red: false, stopMicTrackOnMute: false, videoSimulcastLayers: cfg.simulcastLayers,
     },
   };
 }

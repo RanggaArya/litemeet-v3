@@ -17,8 +17,14 @@ const isAndroid = () => typeof window !== 'undefined' && window.Capacitor?.getPl
 
 // ============ CUSTOM PARTICIPANT TILE (Stealth UI) ============
 function MyParticipantTile({ trackRef, ...props }) {
-  const { useTrackContext } = require('@livekit/components-react');
-  const contextTrackRef = useTrackContext ? useTrackContext() : null;
+  // Safe import — useTrackContext may not exist in all @livekit/components-react versions
+  let contextTrackRef = null;
+  try {
+    const lkComponents = require('@livekit/components-react');
+    if (lkComponents.useTrackContext) {
+      contextTrackRef = lkComponents.useTrackContext();
+    }
+  } catch (e) { /* ignore */ }
   const actualTrackRef = trackRef || contextTrackRef;
   const participant = actualTrackRef?.participant;
   const isLocal = participant?.isLocal;
@@ -339,7 +345,7 @@ function MeetingView({ myName, bandwidthMode, setBandwidthMode, participantsRef,
   const leave = () => {
     if (isRecording) stopRecording();
     if (saveMeetingToHistory) saveMeetingToHistory(true);
-    if (isAndroid()) ForegroundCall.stopService().catch(()=>{});
+    if (isAndroid()) ForegroundCall.stopCall().catch(()=>{});
     if (onLeave) onLeave();
     room.disconnect();
   };
@@ -536,8 +542,8 @@ export default function App() {
         retryCountRef.current = 0; userLeftRef.current = false;
         meetingStartRef.current = Date.now(); participantsRef.current = new Set();
         saveLastUser(room, name);
-        // Mulai foreground service agar panggilan tetap aktif di background
-        try { await ForegroundCall.startCall({ roomName: room }); } catch (e) { console.warn('FG service:', e); }
+        // Mulai foreground service secara non-blocking
+        if (isAndroid()) { ForegroundCall.startCall({ roomName: room }).catch(e => console.warn('FG service:', e)); }
       } else { setConnectionError(data.error || 'Gagal mendapatkan token.'); }
     } catch (e) { setConnectionError('Koneksi ke server gagal.'); }
     finally { setLoading(false); }
