@@ -166,17 +166,20 @@ async function createWindow() {
     }
   });
 
-  // --- CLOSE CONFIRMATION (CUSTOM MODAL) ---
+  // --- CLOSE CONFIRMATION (NATIVE MODAL) ---
   mainWindow.on('close', (e) => {
-    if (!app.isQuitting) {
-      e.preventDefault();
-      mainWindow.webContents.send('request-close'); // Minta React untuk tampilkan modal cantik
-    }
-  });
+    const response = dialog.showMessageBoxSync(mainWindow, {
+      type: 'question',
+      buttons: ['Ya', 'Tidak'],
+      title: 'Konfirmasi Keluar',
+      message: 'Apakah Anda yakin ingin menutup aplikasi LiteMeet?',
+      defaultId: 1, // Default ke 'Tidak'
+      cancelId: 1
+    });
 
-  ipcMain.on('confirm-close', () => {
-    app.isQuitting = true;
-    app.quit();
+    if (response === 1) { // User klik 'Tidak'
+      e.preventDefault();
+    }
   });
 }
 
