@@ -198,7 +198,10 @@ export default function Home() {
     return () => clearInterval(timer);
   }, []);
 
-  const roomOptions = useMemo(() => buildRoomOptions(bandwidthMode), [bandwidthMode]);
+  // IMPORTANT: roomOptions must be stable ref to prevent LiveKitRoom remount on bandwidth switch
+  // Bandwidth switching is handled dynamically via RTP sender params in toggleDataSaver
+  const initialBandwidthRef = useRef(bandwidthMode);
+  const roomOptions = useMemo(() => buildRoomOptions(initialBandwidthRef.current), []);
 
   const joinRoom = async (isRetry = false) => {
     if (!room || !name) {
@@ -215,7 +218,7 @@ export default function Home() {
       const resp = await fetch(apiUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ room: actualRoomName, username: name, retryCount: retryCountRef.current }),
+        body: JSON.stringify({ room: actualRoomName, username: name }),
       });
       const data = await resp.json();
 
@@ -269,10 +272,9 @@ export default function Home() {
     }
   }, [room, name]);
 
-  // Auto-retry with next key when disconnected unexpectedly
+  // Auto-retry on unexpected disconnect — always reconnect to SAME server
   const handleDisconnected = useCallback(() => {
     if (userInitiatedLeaveRef.current) {
-      // Intentional leave by user
       setJoined(false);
       setToken('');
       setServerUrl('');
@@ -281,11 +283,11 @@ export default function Home() {
 
     if (retryCountRef.current < MAX_RETRIES) {
       retryCountRef.current += 1;
-      console.log(`[LiteMeet] 🔄 Disconnected — auto-retrying with next key (attempt ${retryCountRef.current}/${MAX_RETRIES})...`);
+      console.log(`[LiteMeet] 🔄 Disconnected — auto-retrying (attempt ${retryCountRef.current}/${MAX_RETRIES})...`);
+      // Don't clear token/serverUrl — just re-join to get a fresh token for the SAME server
       setJoined(false);
       setToken('');
       setServerUrl('');
-      // Small delay before retry
       setTimeout(() => joinRoom(true), 1500);
     } else {
       console.log('[LiteMeet] ❌ Max retries reached, returning to lobby.');
@@ -293,7 +295,7 @@ export default function Home() {
       setJoined(false);
       setToken('');
       setServerUrl('');
-      setConnectionError('Semua server LiveKit penuh. Coba lagi nanti.');
+      setConnectionError('Koneksi terputus. Silakan coba lagi.');
     }
   }, [room, name, saveMeetingToHistory]);
 

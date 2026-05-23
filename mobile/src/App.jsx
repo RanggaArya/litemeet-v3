@@ -437,7 +437,33 @@ function MeetingView({ myName, bandwidthMode, setBandwidthMode, participantsRef,
           <button className="more-menu-item" onClick={(e) => { e.stopPropagation(); flipCamera(); setShowMore(false); }}>
             <span className="icon" dangerouslySetInnerHTML={{ __html: ICONS.flipCam }} /><span>Flip Kamera</span>
           </button>
-          <button className={`more-menu-item ${bandwidthMode === 'hd' ? 'active' : ''}`} onClick={(e) => { e.stopPropagation(); setBandwidthMode(bandwidthMode === 'saver' ? 'hd' : 'saver'); setShowMore(false); }}>
+          <button className={`more-menu-item ${bandwidthMode === 'hd' ? 'active' : ''}`} onClick={async (e) => {
+            e.stopPropagation();
+            const newMode = bandwidthMode === 'saver' ? 'hd' : 'saver';
+            const cfg = BANDWIDTH_MODES[newMode];
+            setBandwidthMode(newMode);
+            // Dynamically update RTP sender params WITHOUT disconnecting
+            if (localParticipant) {
+              try {
+                const camPubs = localParticipant.videoTrackPublications;
+                for (const [, pub] of camPubs) {
+                  if (pub.track && pub.source === Track.Source.Camera) {
+                    const sender = pub.track.sender;
+                    if (sender) {
+                      const params = sender.getParameters();
+                      if (params.encodings && params.encodings.length > 0) {
+                        params.encodings[0].maxBitrate = cfg.maxBitrate;
+                        params.encodings[0].maxFramerate = cfg.maxFramerate;
+                        await sender.setParameters(params);
+                      }
+                    }
+                  }
+                }
+              } catch (err) { console.warn('Failed to update video encoding:', err); }
+            }
+            addToast(newMode === 'saver' ? '🌿 Mode Hemat aktif' : '🎬 Mode HD aktif', 'success');
+            setShowMore(false);
+          }}>
             <span className="icon">📶</span><span>{bandwidthMode === 'saver' ? 'Switch ke HD' : 'Switch ke Hemat'}</span>
           </button>
         </div>
@@ -524,7 +550,9 @@ export default function App() {
     return () => clearInterval(t);
   }, []);
 
-  const roomOptions = useMemo(() => buildRoomOptions(bandwidthMode), [bandwidthMode]);
+  // IMPORTANT: stable ref to prevent LiveKitRoom remount on bandwidth switch
+  const initialBandwidthRef = useRef(bandwidthMode);
+  const roomOptions = useMemo(() => buildRoomOptions(initialBandwidthRef.current), []);
 
   const joinRoom = async (isRetry = false) => {
     if (!room || !name) { alert('Mohon isi Nama Room dan Nama Anda!'); return; }
@@ -534,7 +562,7 @@ export default function App() {
       const resp = await fetch(`${API_BASE}/api/token`, { 
         method: 'POST', 
         headers: { 'Content-Type': 'application/json' }, 
-        body: JSON.stringify({ room: actualRoomName, username: name, retryCount: retryCountRef.current }) 
+        body: JSON.stringify({ room: actualRoomName, username: name }) 
       });
       const data = await resp.json();
       if (data.token && data.serverUrl) {
@@ -559,14 +587,14 @@ export default function App() {
 
   const handleDisconnected = useCallback(async () => {
     // Hentikan foreground service
-    try { await ForegroundCall.stopCall(); } catch (e) { console.warn('Stop FG service:', e); }
+    if (isAndroid()) ForegroundCall.stopCall().catch(e => console.warn('Stop FG service:', e));
     if (userLeftRef.current) { setJoined(false); setToken(''); setServerUrl(''); return; }
     if (retryCountRef.current < MAX_RETRIES) {
       retryCountRef.current++; setJoined(false); setToken(''); setServerUrl('');
       setTimeout(() => joinRoom(true), 1500);
     } else {
       saveMeetingToHistory(); setJoined(false); setToken(''); setServerUrl('');
-      setConnectionError('Semua server penuh. Coba lagi nanti.');
+      setConnectionError('Koneksi terputus. Silakan coba lagi.');
     }
   }, [room, name, saveMeetingToHistory]);
 

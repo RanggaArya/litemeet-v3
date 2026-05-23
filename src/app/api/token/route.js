@@ -1,31 +1,23 @@
 import { AccessToken } from 'livekit-server-sdk';
 import { NextResponse } from 'next/server';
-import {
-    LIVEKIT_KEYS,
-    getLivekitKey,
-    hashRoomName,
-} from '../_lib/keys';
+import { LIVEKIT_KEYS, hashRoomName } from '../_lib/keys';
 
 export async function POST(req) {
     try {
-        const { room, username, retryCount = 0 } = await req.json();
+        const { room, username } = await req.json();
 
         if (!room || !username) {
             return NextResponse.json({ error: 'Missing room or username' }, { status: 400 });
         }
 
-        // 1. Dapatkan Index Dasar dari Hash Nama Room
-        const baseIndex = hashRoomName(room);
-        
-        // 2. Tambahkan retryCount (jika klien gagal konek sebelumnya, retryCount > 0)
-        const targetIndex = (baseIndex + retryCount) % LIVEKIT_KEYS.length;
-        
-        // 3. Ambil Key yang terpilih
-        const selectedKey = getLivekitKey(targetIndex);
+        // DETERMINISTIC: Semua user di room yang sama SELALU mendapat server yang sama.
+        // retryCount TIDAK lagi menggeser index server.
+        // Ini memastikan semua user di room "DailyCall" selalu ke server #X.
+        const serverIndex = hashRoomName(room) % LIVEKIT_KEYS.length;
+        const selectedKey = LIVEKIT_KEYS[serverIndex];
 
-        console.log(`[Token API] 🎲 Room "${room}" (Hash: ${baseIndex}, Retry: ${retryCount}) -> Assigned to Key #${selectedKey.index} (${selectedKey.apiKey})`);
+        console.log(`[Token API] 🎯 Room "${room}" → FIXED to Server #${serverIndex} (${selectedKey.url})`);
 
-        // 4. Generate Token
         try {
             const at = new AccessToken(selectedKey.apiKey, selectedKey.apiSecret, {
                 identity: username,
@@ -37,7 +29,7 @@ export async function POST(req) {
             return NextResponse.json({
                 token,
                 serverUrl: selectedKey.url,
-                keyIndex: selectedKey.index,
+                keyIndex: serverIndex,
             });
         } catch (err) {
             console.error(`[Token API] ❌ Error generating token:`, err);
