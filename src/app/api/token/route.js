@@ -1,6 +1,5 @@
 import { AccessToken } from 'livekit-server-sdk';
 import { NextResponse } from 'next/server';
-import { LIVEKIT_KEYS, hashRoomName } from '../_lib/keys';
 
 export async function POST(req) {
     try {
@@ -10,16 +9,19 @@ export async function POST(req) {
             return NextResponse.json({ error: 'Missing room or username' }, { status: 400 });
         }
 
-        // DETERMINISTIC: Semua user di room yang sama SELALU mendapat server yang sama.
-        // retryCount TIDAK lagi menggeser index server.
-        // Ini memastikan semua user di room "DailyCall" selalu ke server #X.
-        const serverIndex = hashRoomName(room) % LIVEKIT_KEYS.length;
-        const selectedKey = LIVEKIT_KEYS[serverIndex];
+        const apiKey = process.env.LIVEKIT_API_KEY;
+        const apiSecret = process.env.LIVEKIT_API_SECRET;
+        const url = process.env.LIVEKIT_URL;
 
-        console.log(`[Token API] 🎯 Room "${room}" → FIXED to Server #${serverIndex} (${selectedKey.url})`);
+        if (!apiKey || !apiSecret || !url) {
+            console.error('[Token API] ❌ Missing LiveKit API Keys in process.env');
+            return NextResponse.json({ error: 'Server configuration error' }, { status: 500 });
+        }
+
+        console.log(`[Token API] 🎯 Room "${room}" → Connecting to Vercel ENV Server`);
 
         try {
-            const at = new AccessToken(selectedKey.apiKey, selectedKey.apiSecret, {
+            const at = new AccessToken(apiKey, apiSecret, {
                 identity: username,
             });
 
@@ -28,8 +30,7 @@ export async function POST(req) {
 
             return NextResponse.json({
                 token,
-                serverUrl: selectedKey.url,
-                keyIndex: serverIndex,
+                serverUrl: url,
             });
         } catch (err) {
             console.error(`[Token API] ❌ Error generating token:`, err);

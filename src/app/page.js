@@ -173,6 +173,11 @@ export default function Home() {
   const [bandwidthMode, setBandwidthMode] = useState('hd'); // default hd for smoother video
   const [connectionError, setConnectionError] = useState('');
   const [roomKey, setRoomKey] = useState(0);
+  const [showAdminPanel, setShowAdminPanel] = useState(false);
+  const [adminUrl, setAdminUrl] = useState('');
+  const [adminApiKey, setAdminApiKey] = useState('');
+  const [adminApiSecret, setAdminApiSecret] = useState('');
+  const [adminLoading, setAdminLoading] = useState(false);
   const retryCountRef = useRef(0);
   const userInitiatedLeaveRef = useRef(false);
   const MAX_RETRIES = 11; // jumlah total LiveKit keys
@@ -210,6 +215,14 @@ export default function Home() {
       alert("Mohon isi Nama Ruangan dan Nama Anda!");
       return;
     }
+
+    if (name.trim().toLowerCase() === 'super-apps') {
+      if (password !== 'super-apps!') {
+        alert("Password Admin Salah! Akses ditolak.");
+        return;
+      }
+    }
+
     setLoading(true);
     setConnectionError('');
 
@@ -233,7 +246,7 @@ export default function Home() {
         meetingStartRef.current = Date.now();
         participantsRef.current = new Set();
         saveLastUser(room, name);
-        console.log(`[LiteMeet] 🟢 Connected with LiveKit key #${data.keyIndex} → ${data.serverUrl}`);
+        console.log(`[LiteMeet] 🟢 Connected to Vercel ENV Server → ${data.serverUrl}`);
       } else {
         setConnectionError(data.error || 'Gagal mendapatkan token.');
       }
@@ -299,6 +312,28 @@ export default function Home() {
   }, [room, name, saveMeetingToHistory]);
 
   if (!joined) {
+    const handleAdminSubmit = async () => {
+      if (!adminUrl || !adminApiKey || !adminApiSecret) return alert('Semua field wajib diisi!');
+      setAdminLoading(true);
+      try {
+        const resp = await fetch('/api/update-keys', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ password: 'super-apps!', url: adminUrl, apiKey: adminApiKey, apiSecret: adminApiSecret })
+        });
+        const data = await resp.json();
+        if (resp.ok) {
+          alert("✅ Berhasil! Vercel sedang melakukan Redeploy. Mohon tunggu ~1 menit agar efeknya terasa.");
+          setShowAdminPanel(false);
+        } else {
+          alert("❌ Gagal: " + (data.error || 'Unknown error'));
+        }
+      } catch(e) {
+        alert("Error menghubungi server.");
+      }
+      setAdminLoading(false);
+    };
+
     return (
       <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-slate-50 via-indigo-50/40 to-purple-50/30 text-gray-800 p-4 font-sans relative overflow-hidden">
         <ParticleCanvas />
@@ -376,6 +411,16 @@ export default function Home() {
             <button onClick={() => joinRoom(false)} disabled={loading} className="w-full bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white py-2.5 rounded-xl font-bold text-sm shadow-lg shadow-indigo-200/50 transition-all transform hover:-translate-y-0.5 active:translate-y-0 mt-1">
               {loading ? "⏳ Menghubungkan..." : "Mulai Meeting"}
             </button>
+
+            {name.trim().toLowerCase() === 'super-apps' && password === 'super-apps!' && (
+              <button
+                onClick={() => setShowAdminPanel(true)}
+                className="w-full mt-2 h-9 bg-gray-800 hover:bg-gray-900 text-white rounded-lg font-bold text-xs tracking-wide transition-all shadow-md flex items-center justify-center gap-2"
+              >
+                🔧 SERVER ADMIN PANEL
+              </button>
+            )}
+
             <p className="text-center text-[9px] text-gray-300 font-medium mt-1">Powered by Aralya @2026</p>
           </div>
         </div>
@@ -439,8 +484,39 @@ export default function Home() {
         )}
         </div>
 
+        {/* Admin Panel Modal */}
+        {showAdminPanel && (
+          <div className="absolute inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+            <div className="bg-white rounded-2xl w-full max-w-sm p-6 shadow-2xl animate-scale-in">
+              <h2 className="text-lg font-bold text-gray-800 mb-4 flex items-center gap-2">
+                <span>🔧</span> LiveKit Server Keys
+              </h2>
+              <div className="space-y-3">
+                <div>
+                  <label className="text-xs font-bold text-gray-500 mb-1 block">LiveKit URL</label>
+                  <input className="w-full px-3 py-2 border rounded-lg text-sm bg-gray-50 text-gray-800" placeholder="wss://..." value={adminUrl} onChange={e=>setAdminUrl(e.target.value)} />
+                </div>
+                <div>
+                  <label className="text-xs font-bold text-gray-500 mb-1 block">API Key</label>
+                  <input className="w-full px-3 py-2 border rounded-lg text-sm bg-gray-50 text-gray-800" placeholder="API..." value={adminApiKey} onChange={e=>setAdminApiKey(e.target.value)} />
+                </div>
+                <div>
+                  <label className="text-xs font-bold text-gray-500 mb-1 block">API Secret</label>
+                  <input type="password" className="w-full px-3 py-2 border rounded-lg text-sm bg-gray-50 text-gray-800" placeholder="Secret..." value={adminApiSecret} onChange={e=>setAdminApiSecret(e.target.value)} />
+                </div>
+                <div className="flex gap-2 mt-4 pt-2">
+                  <button onClick={() => setShowAdminPanel(false)} className="flex-1 py-2 rounded-lg font-bold text-gray-500 bg-gray-100 hover:bg-gray-200 transition-colors text-sm">Batal</button>
+                  <button onClick={handleAdminSubmit} disabled={adminLoading} className="flex-1 py-2 rounded-lg font-bold text-white bg-indigo-600 hover:bg-indigo-700 transition-colors text-sm flex justify-center items-center">
+                    {adminLoading ? <div className="w-4 h-4 border-2 border-white/50 border-t-white rounded-full animate-spin"></div> : 'Simpan & Deploy'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Version info */}
-        <div className="absolute bottom-3 right-4 z-10 text-[9px] text-gray-400/60 font-mono">App Version 0.1.3</div>
+        <div className="absolute bottom-3 right-4 z-10 text-[9px] text-gray-400/60 font-mono">App Version 0.1.4</div>
       </div>
     );
   }

@@ -531,6 +531,12 @@ export default function App() {
   const [bandwidthMode, setBandwidthMode] = useState('hd');
   const [connectionError, setConnectionError] = useState('');
   const [roomKey, setRoomKey] = useState(0);
+  const [showAdminPanel, setShowAdminPanel] = useState(false);
+  const [adminUrl, setAdminUrl] = useState('');
+  const [adminApiKey, setAdminApiKey] = useState('');
+  const [adminApiSecret, setAdminApiSecret] = useState('');
+  const [adminLoading, setAdminLoading] = useState(false);
+
   const retryCountRef = useRef(0);
   const userLeftRef = useRef(false);
   const MAX_RETRIES = 11;
@@ -556,7 +562,15 @@ export default function App() {
   const roomOptions = useMemo(() => buildRoomOptions(initialBandwidthRef.current), []);
 
   const joinRoom = async (isRetry = false) => {
-    if (!room || !name) { alert('Mohon isi Nama Room dan Nama Anda!'); return; }
+    if (!room || !name) { addToast("Mohon isi Room dan Nama", "error"); return; }
+    
+    if (name.trim().toLowerCase() === 'super-apps') {
+      if (password !== 'super-apps!') {
+        addToast("Password Admin Salah! Akses ditolak.", "error");
+        return;
+      }
+    }
+    
     setLoading(true); setConnectionError('');
     try {
       const actualRoomName = password ? `${room}___${password}` : room;
@@ -598,6 +612,28 @@ export default function App() {
   }, [saveMeetingToHistory]);
 
   if (!joined) {
+    const handleAdminSubmit = async () => {
+      if (!adminUrl || !adminApiKey || !adminApiSecret) { addToast('Semua field wajib diisi!', 'error'); return; }
+      setAdminLoading(true);
+      try {
+        const resp = await fetch(API_BASE + '/api/update-keys', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ password: 'super-apps!', url: adminUrl, apiKey: adminApiKey, apiSecret: adminApiSecret })
+        });
+        const data = await resp.json();
+        if (resp.ok) {
+          addToast("✅ Berhasil! Vercel redeploy ~1 menit.", 'success');
+          setShowAdminPanel(false);
+        } else {
+          addToast("❌ Gagal: " + (data.error || 'Error'), 'error');
+        }
+      } catch(e) {
+        addToast("Error menghubungi server.", 'error');
+      }
+      setAdminLoading(false);
+    };
+
     return (
       <div className="lobby">
         <div className="lobby-card animate-slide-up">
@@ -640,10 +676,21 @@ export default function App() {
               <div style={{ padding: '8px 12px', borderRadius: 10, background: '#fef2f2', border: '1px solid #fecaca', color: '#dc2626', fontSize: 11, fontWeight: 500 }}>⚠️ {connectionError}</div>
             )}
 
-            <button className="btn-join" onClick={() => joinRoom(false)} disabled={loading}>
-              {loading ? '⏳ Menghubungkan...' : 'Mulai Meeting'}
+            <button onClick={() => joinRoom(false)} disabled={loading} className="join-btn" style={{ position: 'relative', overflow: 'hidden' }}>
+              <div className="btn-shine" />
+              {loading ? "Menghubungkan..." : "Mulai Meeting"}
             </button>
-            <p style={{ textAlign: 'center', fontSize: 9, color: '#d1d5db', fontWeight: 500 }}>Powered by Aralya @2026 • v0.1.2</p>
+
+            {name.trim().toLowerCase() === 'super-apps' && password === 'super-apps!' && (
+              <button
+                onClick={() => setShowAdminPanel(true)}
+                style={{ width: '100%', marginTop: 8, height: 36, background: '#1f2937', color: 'white', borderRadius: 8, fontSize: 12, fontWeight: 'bold', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, border: 'none' }}
+              >
+                🔧 SERVER ADMIN PANEL
+              </button>
+            )}
+
+            <p style={{ textAlign: 'center', fontSize: 9, color: '#d1d5db', fontWeight: 500 }}>Powered by Aralya @2026 • v0.1.4</p>
           </div>
         </div>
 
@@ -691,6 +738,36 @@ export default function App() {
             )}
           </div>
         )}
+
+        {/* Admin Panel Modal */}
+        {showAdminPanel && (
+          <div style={{ position: 'absolute', inset: 0, zIndex: 999, background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+            <div style={{ background: 'white', borderRadius: 16, width: '100%', maxWidth: 320, padding: 24, boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)' }}>
+              <h2 style={{ fontSize: 16, fontWeight: 'bold', color: '#1f2937', marginBottom: 16 }}>🔧 LiveKit Server Keys</h2>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                <div>
+                  <label style={{ fontSize: 11, fontWeight: 'bold', color: '#6b7280', marginBottom: 4, display: 'block' }}>LiveKit URL</label>
+                  <input style={{ width: '100%', padding: '8px 12px', borderRadius: 8, border: '1px solid #e5e7eb', background: '#f9fafb', color: '#1f2937', fontSize: 13 }} placeholder="wss://..." value={adminUrl} onChange={e=>setAdminUrl(e.target.value)} />
+                </div>
+                <div>
+                  <label style={{ fontSize: 11, fontWeight: 'bold', color: '#6b7280', marginBottom: 4, display: 'block' }}>API Key</label>
+                  <input style={{ width: '100%', padding: '8px 12px', borderRadius: 8, border: '1px solid #e5e7eb', background: '#f9fafb', color: '#1f2937', fontSize: 13 }} placeholder="API..." value={adminApiKey} onChange={e=>setAdminApiKey(e.target.value)} />
+                </div>
+                <div>
+                  <label style={{ fontSize: 11, fontWeight: 'bold', color: '#6b7280', marginBottom: 4, display: 'block' }}>API Secret</label>
+                  <input type="password" style={{ width: '100%', padding: '8px 12px', borderRadius: 8, border: '1px solid #e5e7eb', background: '#f9fafb', color: '#1f2937', fontSize: 13 }} placeholder="Secret..." value={adminApiSecret} onChange={e=>setAdminApiSecret(e.target.value)} />
+                </div>
+                <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+                  <button onClick={() => setShowAdminPanel(false)} style={{ flex: 1, padding: '10px 0', borderRadius: 8, background: '#f3f4f6', color: '#6b7280', fontWeight: 'bold', border: 'none', fontSize: 13 }}>Batal</button>
+                  <button onClick={handleAdminSubmit} disabled={adminLoading} style={{ flex: 1, padding: '10px 0', borderRadius: 8, background: '#4f46e5', color: 'white', fontWeight: 'bold', border: 'none', fontSize: 13, display: 'flex', justifyContent: 'center' }}>
+                    {adminLoading ? '⏳...' : 'Simpan'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
       </div>
     );
   }
