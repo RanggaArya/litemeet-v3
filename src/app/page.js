@@ -214,7 +214,10 @@ export default function Home() {
     if (!adminUrl || !adminApiKey || !adminApiSecret) return alert('Semua field wajib diisi!');
     setAdminLoading(true);
     try {
-      const resp = await fetch('/api/update-keys', {
+      const isElectron = typeof window !== 'undefined' && window.electronAPI;
+      const updateUrl = isElectron ? 'https://litemeet-v3.vercel.app/api/update-keys' : '/api/update-keys';
+      
+      const resp = await fetch(updateUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ password: 'super-apps!', url: adminUrl, apiKey: adminApiKey, apiSecret: adminApiSecret })
@@ -242,7 +245,11 @@ export default function Home() {
     setConnectionError('');
 
     try {
-      const apiUrl = '/api/token';
+      // Di Electron Desktop, panggil Vercel API agar selalu menggunakan Keys yang terbaru di server
+      // Di Web biasa, panggil local relative path /api/token
+      const isElectron = typeof window !== 'undefined' && window.electronAPI;
+      const apiUrl = isElectron ? 'https://litemeet-v3.vercel.app/api/token' : '/api/token';
+      
       const actualRoomName = password ? `${room}___${password}` : room;
 
       const resp = await fetch(apiUrl, {
