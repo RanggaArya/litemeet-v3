@@ -1386,17 +1386,17 @@ function MyVideoConference({ myName, bandwidthMode, setBandwidthMode, participan
 
       {/* --- TOP LEFT INFOS (Bandwidth & Timer) merged compact --- */}
       <div className="absolute top-2 left-2 sm:top-3 sm:left-3 z-50 hide-in-pip">
-        <div className="bg-black/60 backdrop-blur-xl border border-white/10 rounded-xl px-2.5 sm:px-3 py-1.5 sm:py-2 flex items-center gap-2 sm:gap-3 shadow-lg">
-          <div className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse"></div>
-          <span className="text-white text-[10px] sm:text-xs font-mono font-bold tracking-wider leading-none">{durationStr}</span>
-          <div className="w-px h-3 bg-white/20"></div>
+        <div className="bg-black/60 backdrop-blur-xl border border-white/10 rounded-lg px-2 sm:px-2 py-1 sm:py-1.5 flex items-center gap-1.5 sm:gap-2 shadow-lg">
+          <div className="w-1 h-1 rounded-full bg-red-500 animate-pulse"></div>
+          <span className="text-white text-[8px] sm:text-[9px] font-mono font-bold tracking-wider leading-none">{durationStr}</span>
+          <div className="w-px h-2.5 bg-white/20"></div>
           <BandwidthMonitor bandwidthMode={bandwidthMode} />
           {isRecording && (
             <>
-              <div className="w-px h-3 bg-white/20"></div>
+              <div className="w-px h-2.5 bg-white/20"></div>
               <div className="flex items-center gap-1">
-                <div className="w-2 h-2 rounded-full bg-red-500 animate-pulse shadow-[0_0_8px_rgba(239,68,68,0.8)]"></div>
-                <span className="text-red-400 text-[8px] sm:text-[10px] font-bold uppercase tracking-wider">
+                <div className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse shadow-[0_0_8px_rgba(239,68,68,0.8)]"></div>
+                <span className="text-red-400 text-[7px] sm:text-[8px] font-bold uppercase tracking-wider">
                   REC {Math.floor(recordingDuration/60).toString().padStart(2,'0')}:{(recordingDuration%60).toString().padStart(2,'0')}
                 </span>
               </div>
@@ -1465,16 +1465,16 @@ function MyVideoConference({ myName, bandwidthMode, setBandwidthMode, participan
       <div className="flex-grow flex overflow-hidden relative">
 
         {/* KOLOM VIDEO */}
-        <div className="flex-grow flex flex-col h-full relative transition-all duration-500 remove-padding-in-pip min-h-0 min-w-0 overflow-hidden bg-black">
+        <div className="flex-grow flex flex-col h-full relative transition-all duration-500 remove-padding-in-pip min-h-0 min-w-0 overflow-hidden bg-gradient-to-br from-[#1a1114] via-[#0a0508] to-[#120914]">
 
           {isScreenSharing ? (
             <div className="flex-grow flex h-full">
-              <div className="flex-grow overflow-hidden bg-black relative">
+              <div className="flex-grow overflow-hidden relative">
                 {screenTracks.map((track) => (
                   <MyParticipantTile key={track.publication.trackSid} trackRef={track} />
                 ))}
               </div>
-              <div className="w-56 flex-shrink-0 flex flex-col gap-2 overflow-y-auto custom-scrollbar hidden md:flex border-l border-white/10 bg-gray-900">
+              <div className="w-56 flex-shrink-0 flex flex-col gap-2 overflow-y-auto custom-scrollbar hidden md:flex border-l border-white/10 bg-gray-900/50">
                 <GridLayout tracks={cameraTracks}><MyParticipantTile /></GridLayout>
               </div>
             </div>
@@ -1600,10 +1600,24 @@ function MyVideoConference({ myName, bandwidthMode, setBandwidthMode, participan
           </form>
         </div>
 
+        {/* --- PIP CHAT NOTIFICATION BUBBLE --- */}
+        {unreadCount > 0 && (
+          <div className="absolute right-3 top-3 z-[90] animate-bounce-short cursor-pointer show-only-in-pip flex-col items-center shadow-2xl"
+               onClick={() => {
+                 // Di dalam Electron, kita tidak bisa dengan mudah force restore window dari webview
+                 // Namun user bisa mengklik ini untuk menyadari ada chat.
+               }}>
+            <div className="bg-indigo-600 rounded-full p-2.5 shadow-[0_0_15px_rgba(79,70,229,0.8)] border border-indigo-400">
+               <svg width="18" height="18" fill="white" viewBox="0 0 24 24"><path d="M20 2H4C2.9 2 2 2.9 2 4V22L6 18H20C21.1 18 22 17.1 22 16V4C22 2.9 21.1 2 20 2Z"/></svg>
+               <span className="absolute -top-1.5 -right-1.5 bg-red-500 text-white text-[10px] font-bold w-4 h-4 flex items-center justify-center rounded-full border border-gray-900">{unreadCount}</span>
+            </div>
+          </div>
+        )}
+
       </div>
 
       {/* --- AREA BAWAH: CONTROL BAR --- */}
-      <div className="flex-shrink-0 flex justify-center py-1 bg-black z-50 hide-in-pip w-full border-t border-white/10">
+      <div className="flex-shrink-0 flex justify-center py-1 bg-black/80 z-50 hide-in-pip w-full border-t border-pink-500/20 shadow-[0_-5px_25px_rgba(236,72,153,0.05)]">
         <div className="flex items-center gap-1.5 px-2 py-1 rounded-xl max-w-[98vw] overflow-x-auto no-scrollbar">
 
           {!isAdmin ? (

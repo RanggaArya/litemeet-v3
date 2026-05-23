@@ -55,3 +55,10 @@ body {
 .animate-float { animation: float 3s ease-in-out infinite; }
 .animate-slide-up { animation: slideUp 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
 .animate-shine { animation: shine 2.5s infinite cubic-bezier(0.4, 0, 0.2, 1); }
+
+@media (max-width: 400px) {
+  .show-only-in-pip { display: flex !important; }
+}
+@media (min-width: 401px) {
+  .show-only-in-pip { display: none !important; }
+}
