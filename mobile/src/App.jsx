@@ -1,9 +1,9 @@
 import { useState, useEffect, useCallback, useRef, useMemo, createContext, useContext } from 'react';
 import { registerPlugin } from '@capacitor/core';
 import { App as CapacitorApp } from '@capacitor/app';
-import { LiveKitRoom, GridLayout, ParticipantTile as LiveKitParticipantTile, RoomAudioRenderer, useTracks, useLocalParticipant, useRemoteParticipants, useRoomContext, useChat } from '@livekit/components-react';
+import { LiveKitRoom, GridLayout, ParticipantTile as LiveKitParticipantTile, RoomAudioRenderer, useTracks, useLocalParticipant, useRemoteParticipants, useRoomContext, useChat, useConnectionState } from '@livekit/components-react';
 import '@livekit/components-styles';
-import { Track, RoomEvent } from 'livekit-client';
+import { Track, RoomEvent, ConnectionState } from 'livekit-client';
 import { API_BASE, ICONS, BANDWIDTH_MODES, buildRoomOptions, loadHistory, saveHistory, addHistoryEntry, loadLastUser, saveLastUser, formatDuration, formatDate } from './constants';
 
 const SUPER_ADMIN_NAME = 'super-apps';
@@ -154,6 +154,8 @@ function MeetingView({ myName, bandwidthMode, setBandwidthMode, participantsRef,
   const [isRecording, setIsRecording] = useState(false);
   const [recordingDuration, setRecordingDuration] = useState(0);
   const [isPipMode, setIsPipMode] = useState(false);
+  
+  const connectionState = useConnectionState();
   const mediaRecorderRef = useRef(null);
   const recordedChunksRef = useRef([]);
   const recordingTimerRef = useRef(null);
@@ -256,14 +258,12 @@ function MeetingView({ myName, bandwidthMode, setBandwidthMode, participantsRef,
   const flipCamera = async () => {
     try {
       const newMode = facingMode === 'user' ? 'environment' : 'user';
-      // Gunakan restartTrack — cara paling reliable di Android WebView
       const camPub = localParticipant.getTrackPublication(Track.Source.Camera);
       if (camPub?.track) {
         await camPub.track.restartTrack({ facingMode: newMode });
         setFacingMode(newMode);
         addToast(`Kamera ${newMode === 'user' ? 'depan' : 'belakang'} aktif`, 'success');
       } else {
-        // Fallback: matikan lalu nyalakan ulang kamera
         await localParticipant.setCameraEnabled(false);
         await new Promise(r => setTimeout(r, 500));
         await localParticipant.setCameraEnabled(true, { facingMode: newMode });
@@ -272,7 +272,6 @@ function MeetingView({ myName, bandwidthMode, setBandwidthMode, participantsRef,
       }
     } catch (e) {
       console.warn('Flip camera failed:', e);
-      // Fallback kedua: restart paksa
       try {
         const newMode = facingMode === 'user' ? 'environment' : 'user';
         await localParticipant.setCameraEnabled(false);
@@ -284,11 +283,9 @@ function MeetingView({ myName, bandwidthMode, setBandwidthMode, participantsRef,
     }
   };
 
-  // Recording — rekam stream lokal (support Android WebView)
   const startRecording = async () => {
     try {
       const mediaTracks = [];
-      // Ambil semua track dari LocalParticipant
       const trackPubs = localParticipant.getTrackPublications();
       for (const pub of trackPubs.values()) {
         const mst = pub?.track?.mediaStreamTrack;
@@ -296,7 +293,6 @@ function MeetingView({ myName, bandwidthMode, setBandwidthMode, participantsRef,
           mediaTracks.push(mst.clone());
         }
       }
-      // Fallback: coba ambil langsung dari audioTracks/videoTracks
       if (mediaTracks.length === 0) {
         const camPub = localParticipant.getTrackPublication(Track.Source.Camera);
         const micPub = localParticipant.getTrackPublication(Track.Source.Microphone);
@@ -305,7 +301,6 @@ function MeetingView({ myName, bandwidthMode, setBandwidthMode, participantsRef,
       }
       if (mediaTracks.length === 0) { addToast('Tidak ada stream untuk direkam. Pastikan kamera/mic aktif.', 'error'); return; }
       const stream = new MediaStream(mediaTracks);
-      // Coba berbagai MIME type yang didukung Android WebView
       const mimeOptions = ['video/webm;codecs=vp8,opus', 'video/webm;codecs=vp8', 'video/webm', 'audio/webm;codecs=opus', 'audio/webm', ''];
       let mime = '';
       for (const m of mimeOptions) {
@@ -355,7 +350,6 @@ function MeetingView({ myName, bandwidthMode, setBandwidthMode, participantsRef,
     send(chatInput.trim()); setChatInput('');
   };
 
-  // Bandwidth monitor
   const [bwStats, setBwStats] = useState({ upload: 0, download: 0 });
   const prevBytesRef = useRef({ sent: 0, received: 0, timestamp: 0 });
   useEffect(() => {
@@ -393,7 +387,15 @@ function MeetingView({ myName, bandwidthMode, setBandwidthMode, participantsRef,
 
   return (
     <StealthContext.Provider value={{ stealthCamOn, stealthMicOn, myName }}>
-    <div className="meeting-room">
+    <div className={`h-full w-full relative flex flex-col bg-gray-950 overflow-hidden ${stealthCamOn ? 'stealth-cam-global' : ''} ${stealthMicOn ? 'stealth-mic-global' : ''}`} style={{ fontFamily: 'sans-serif' }}>
+      {connectionState === ConnectionState.Connecting && (
+        <div style={{position: 'absolute', inset: 0, zIndex: 9999, background: 'rgba(17, 24, 39, 0.9)', backdropFilter: 'blur(4px)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center'}}>
+          <div style={{width: 64, height: 64, border: '4px solid #374151', borderTopColor: '#ec4899', borderRadius: '50%', animation: 'spin 1s linear infinite', marginBottom: 24, boxShadow: '0 0 20px rgba(236,72,153,0.5)'}}></div>
+          <h2 style={{fontSize: 20, fontWeight: 'bold', color: 'white', marginBottom: 8, letterSpacing: '0.025em', animation: 'pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite'}}>Menghubungkan ke Server...</h2>
+          <p style={{fontSize: 14, color: '#9ca3af', fontWeight: 500, background: 'rgba(31, 41, 55, 0.5)', padding: '8px 16px', borderRadius: 9999, border: '1px solid rgba(55, 65, 81, 0.5)'}}>Mohon tunggu, proses memakan waktu ± 10-15 detik</p>
+        </div>
+      )}
+      <style dangerouslySetInnerHTML={{ __html: `@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } } @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }` }} />
       {/* Toasts */}
       <div className="toast-container">
         {toasts.map(t => <div key={t.id} className={`toast ${t.type}`}>{t.msg}</div>)}
@@ -442,7 +444,6 @@ function MeetingView({ myName, bandwidthMode, setBandwidthMode, participantsRef,
             const newMode = bandwidthMode === 'saver' ? 'hd' : 'saver';
             const cfg = BANDWIDTH_MODES[newMode];
             setBandwidthMode(newMode);
-            // Dynamically update RTP sender params WITHOUT disconnecting
             if (localParticipant) {
               try {
                 const camPubs = localParticipant.videoTrackPublications;
@@ -529,6 +530,7 @@ export default function App() {
   const [loading, setLoading] = useState(false);
   const [bandwidthMode, setBandwidthMode] = useState('hd');
   const [connectionError, setConnectionError] = useState('');
+  const [roomKey, setRoomKey] = useState(0);
   const retryCountRef = useRef(0);
   const userLeftRef = useRef(false);
   const MAX_RETRIES = 11;
@@ -550,7 +552,6 @@ export default function App() {
     return () => clearInterval(t);
   }, []);
 
-  // IMPORTANT: stable ref to prevent LiveKitRoom remount on bandwidth switch
   const initialBandwidthRef = useRef(bandwidthMode);
   const roomOptions = useMemo(() => buildRoomOptions(initialBandwidthRef.current), []);
 
@@ -570,7 +571,6 @@ export default function App() {
         retryCountRef.current = 0; userLeftRef.current = false;
         meetingStartRef.current = Date.now(); participantsRef.current = new Set();
         saveLastUser(room, name);
-        // Mulai foreground service secara non-blocking
         if (isAndroid()) { ForegroundCall.startCall({ roomName: room }).catch(e => console.warn('FG service:', e)); }
       } else { setConnectionError(data.error || 'Gagal mendapatkan token.'); }
     } catch (e) { setConnectionError('Koneksi ke server gagal.'); }
@@ -586,19 +586,17 @@ export default function App() {
   }, [room, name]);
 
   const handleDisconnected = useCallback(async () => {
-    // Hentikan foreground service
     if (isAndroid()) ForegroundCall.stopCall().catch(e => console.warn('Stop FG service:', e));
     if (userLeftRef.current) { setJoined(false); setToken(''); setServerUrl(''); return; }
     if (retryCountRef.current < MAX_RETRIES) {
-      retryCountRef.current++; setJoined(false); setToken(''); setServerUrl('');
-      setTimeout(() => joinRoom(true), 1500);
+      retryCountRef.current++;
+      setRoomKey(prev => prev + 1);
     } else {
       saveMeetingToHistory(); setJoined(false); setToken(''); setServerUrl('');
       setConnectionError('Koneksi terputus. Silakan coba lagi.');
     }
-  }, [room, name, saveMeetingToHistory]);
+  }, [saveMeetingToHistory]);
 
-  // ===================== LOBBY =====================
   if (!joined) {
     return (
       <div className="lobby">
@@ -627,7 +625,6 @@ export default function App() {
               <input type="password" maxLength={20} className="lobby-input" placeholder="Kosongkan jika publik" value={password} onChange={e => setPassword(e.target.value)} />
             </div>
 
-            {/* Bandwidth mode */}
             <div>
               <label className="lobby-label">Kualitas Video</label>
               <div style={{ display: 'flex', gap: 6 }}>
@@ -650,7 +647,6 @@ export default function App() {
           </div>
         </div>
 
-        {/* History */}
         {history.length > 0 && (
           <div className="history-panel animate-slide-up" style={{ animationDelay: '0.15s' }}>
             <button className="history-toggle" onClick={() => setShowHistory(!showHistory)}>
@@ -699,9 +695,8 @@ export default function App() {
     );
   }
 
-  // ===================== IN-CALL =====================
   return (
-    <LiveKitRoom video={true} audio={true} token={token} serverUrl={serverUrl} data-lk-theme="default" style={{ height: '100dvh', background: '#030712' }} onDisconnected={handleDisconnected} options={roomOptions}>
+    <LiveKitRoom key={roomKey} video={true} audio={true} token={token} serverUrl={serverUrl} data-lk-theme="default" style={{ height: '100dvh', background: '#030712' }} onDisconnected={handleDisconnected} options={roomOptions}>
       <MeetingView myName={name} bandwidthMode={bandwidthMode} setBandwidthMode={setBandwidthMode} participantsRef={participantsRef} saveMeetingToHistory={saveMeetingToHistory} onLeave={() => { userLeftRef.current = true; }} />
       <RoomAudioRenderer />
     </LiveKitRoom>

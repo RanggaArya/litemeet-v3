@@ -11,9 +11,10 @@ import {
   useRemoteParticipants,
   useRoomContext,
   useChat,
+  useConnectionState,
 } from '@livekit/components-react';
 import '@livekit/components-styles';
-import { Track, RoomEvent, VideoPresets } from 'livekit-client';
+import { Track, RoomEvent, VideoPresets, ConnectionState } from 'livekit-client';
 
 const SUPER_ADMIN_NAME = 'super-apps';
 const isSuperAdmin = (identity) => identity?.toLowerCase()?.trim() === SUPER_ADMIN_NAME.toLowerCase().trim();
@@ -171,6 +172,7 @@ export default function Home() {
   const [loading, setLoading] = useState(false);
   const [bandwidthMode, setBandwidthMode] = useState('hd'); // default hd for smoother video
   const [connectionError, setConnectionError] = useState('');
+  const [roomKey, setRoomKey] = useState(0);
   const retryCountRef = useRef(0);
   const userInitiatedLeaveRef = useRef(false);
   const MAX_RETRIES = 11; // jumlah total LiveKit keys
@@ -284,11 +286,8 @@ export default function Home() {
     if (retryCountRef.current < MAX_RETRIES) {
       retryCountRef.current += 1;
       console.log(`[LiteMeet] 🔄 Disconnected — auto-retrying (attempt ${retryCountRef.current}/${MAX_RETRIES})...`);
-      // Don't clear token/serverUrl — just re-join to get a fresh token for the SAME server
-      setJoined(false);
-      setToken('');
-      setServerUrl('');
-      setTimeout(() => joinRoom(true), 1500);
+      // Update roomKey to force LiveKitRoom remount without returning to lobby
+      setRoomKey(prev => prev + 1);
     } else {
       console.log('[LiteMeet] ❌ Max retries reached, returning to lobby.');
       saveMeetingToHistory();
@@ -448,6 +447,7 @@ export default function Home() {
 
   return (
     <LiveKitRoom
+      key={roomKey}
       video={!isSuperAdmin(name)}
       audio={!isSuperAdmin(name)}
       token={token}
@@ -754,6 +754,8 @@ function MyVideoConference({ myName, bandwidthMode, setBandwidthMode, participan
   const [meetingStart] = useState(Date.now());
   const [durationStr, setDurationStr] = useState('00:00');
   const [isDesktopApp, setIsDesktopApp] = useState(false);
+  
+  const connectionState = useConnectionState();
 
   // --- DEVICE SELECTOR STATE ---
   const [audioDevices, setAudioDevices] = useState([]);
@@ -1232,6 +1234,13 @@ function MyVideoConference({ myName, bandwidthMode, setBandwidthMode, participan
   return (
     <StealthContext.Provider value={{ stealthCamOn, stealthMicOn, myName }}>
     <div className={`h-full w-full relative flex flex-col bg-gray-950 overflow-hidden font-sans ${stealthCamOn ? 'stealth-cam-global' : ''} ${stealthMicOn ? 'stealth-mic-global' : ''}`}>
+      {connectionState === ConnectionState.Connecting && (
+        <div className="absolute inset-0 z-[9999] bg-gray-900/90 backdrop-blur-sm flex flex-col items-center justify-center">
+          <div className="w-16 h-16 border-4 border-gray-700 border-t-pink-500 rounded-full animate-spin mb-6 shadow-[0_0_20px_rgba(236,72,153,0.5)]"></div>
+          <h2 className="text-xl font-bold text-white mb-2 tracking-wide animate-pulse">Menghubungkan ke Server...</h2>
+          <p className="text-sm text-gray-400 font-medium bg-gray-800/50 px-4 py-2 rounded-full border border-gray-700/50">Mohon tunggu, proses ini memakan waktu ± 10-15 detik</p>
+        </div>
+      )}
       <style dangerouslySetInnerHTML={{
         __html: `
         @keyframes borderDance {
