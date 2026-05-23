@@ -1064,14 +1064,20 @@ function MyVideoConference({ myName, bandwidthMode, setBandwidthMode, participan
   }, [room, addToast]);
 
   // LOGIC CHAT COUNTER
+  const lastProcessedChatRef = useRef(0);
+
   useEffect(() => {
-    if (!isChatOpen && chatMessages.length > 0) {
-      const lastMsg = chatMessages[chatMessages.length - 1];
-      if (lastMsg && lastMsg.from?.identity !== myName) {
-        setUnreadCount(prev => prev + 1);
-      }
-    } else {
+    if (isChatOpen) {
       setUnreadCount(0);
+      if (chatMessages.length > 0) {
+        lastProcessedChatRef.current = chatMessages[chatMessages.length - 1].timestamp;
+      }
+    } else if (chatMessages.length > 0) {
+      const lastMsg = chatMessages[chatMessages.length - 1];
+      if (lastMsg && lastMsg.timestamp > lastProcessedChatRef.current && lastMsg.from?.identity !== myName) {
+        setUnreadCount(prev => prev + 1);
+        lastProcessedChatRef.current = lastMsg.timestamp;
+      }
     }
   }, [chatMessages, isChatOpen, myName]);
 
