@@ -47,17 +47,15 @@ export async function POST(req) {
                     throw new Error(`Gagal menghapus ${key} lama: ${txt}`);
                 }
             }
-            
             // Create via POST
             const postRes = await fetch(`https://api.vercel.com/v10/projects/${projectId}/env`, {
-                    method: 'POST',
-                    headers,
-                    body: JSON.stringify({ key, value, type: 'encrypted', target: ['production', 'preview', 'development'] })
-                });
-                if (!postRes.ok) {
-                    const txt = await postRes.text();
-                    throw new Error(`Gagal membuat ${key}: ${txt}`);
-                }
+                method: 'POST',
+                headers,
+                body: JSON.stringify({ key, value, type: 'encrypted', target: ['production', 'preview', 'development'] })
+            });
+            if (!postRes.ok) {
+                const txt = await postRes.text();
+                throw new Error(`Gagal membuat ${key}: ${txt}`);
             }
         };
 
