@@ -64,8 +64,19 @@ export async function POST(req) {
         await updateEnv('LIVEKIT_API_KEY', apiKey);
         await updateEnv('LIVEKIT_API_SECRET', apiSecret);
 
-        // Vercel akan otomatis men-trigger redeploy saat env var berubah (jika setting auto-redeploy aktif).
-        // Biasanya butuh sekitar 1-2 menit untuk live.
+        // 4. Trigger Deploy Hook agar Vercel mereload ENV baru
+        const deployHookUrl = process.env.VERCEL_DEPLOY_HOOK_URL;
+        if (deployHookUrl) {
+            console.log('[Update Keys API] 🚀 Triggering Vercel Deploy Hook...');
+            const deployRes = await fetch(deployHookUrl, { method: 'POST' });
+            if (!deployRes.ok) {
+                console.warn('[Update Keys API] ⚠️ Deploy hook gagal dipanggil:', await deployRes.text());
+            } else {
+                console.log('[Update Keys API] ✅ Deploy hook berhasil dipanggil!');
+            }
+        } else {
+            console.warn('[Update Keys API] ⚠️ VERCEL_DEPLOY_HOOK_URL tidak disetting, Vercel tidak otomatis redeploy!');
+        }
 
         return NextResponse.json({ success: true, message: 'API Keys updated successfully. Vercel is redeploying.' });
 
