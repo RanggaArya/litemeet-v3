@@ -1604,58 +1604,26 @@ function MyVideoConference({ myName, bandwidthMode, setBandwidthMode, participan
 
       {/* --- AREA BAWAH: CONTROL BAR --- */}
       <div className="flex-shrink-0 flex justify-center py-1 bg-black z-50 hide-in-pip w-full border-t border-white/10">
-        <div className="flex items-center gap-1 sm:gap-2 px-2 sm:px-4 py-1.5 sm:py-2 rounded-xl max-w-[98vw] overflow-x-auto no-scrollbar">
+        <div className="flex items-center gap-1.5 px-2 py-1 rounded-xl max-w-[98vw] overflow-x-auto no-scrollbar">
 
           {!isAdmin ? (
             <>
-              {/* === MIC BUTTON WITH DEVICE SELECTOR === */}
+              {/* === MIC BUTTON === */}
               <div className="relative flex items-center flex-shrink-0">
-                <button onClick={toggleMic} className={`p-2 sm:p-2.5 rounded-l-lg sm:rounded-l-xl transition-all duration-300 ${isMuted ? 'bg-red-500 text-white shadow-[0_0_15px_rgba(239,68,68,0.4)]' : 'bg-white/10 text-white hover:bg-white/20'}`}>
+                <button onClick={toggleMic} className={`p-1.5 rounded-lg transition-all duration-300 ${isMuted ? 'bg-red-500 text-white shadow-[0_0_15px_rgba(239,68,68,0.4)]' : 'bg-pink-500/20 text-pink-100 hover:bg-pink-500/30 border border-pink-500/30'}`}>
                   <div className="scale-75" dangerouslySetInnerHTML={{ __html: isMuted ? ICONS.micOff : ICONS.mic }} />
                 </button>
-                <button
-                  onClick={() => { setShowMicSelector(!showMicSelector); setShowCamSelector(false); refreshDevices(); }}
-                  className={`p-1.5 sm:p-2 rounded-r-lg sm:rounded-r-xl border-l transition-all duration-300 ${isMuted ? 'bg-red-600 border-red-400/30 text-white hover:bg-red-400' : 'bg-white/10 border-white/10 text-gray-400 hover:bg-white/20 hover:text-white'}`}
-                  title="Pilih Mikrofon"
-                >
-                  <div className="scale-75" dangerouslySetInnerHTML={{ __html: ICONS.chevronDown }} />
-                </button>
-                {showMicSelector && (
-                  <DeviceSelector
-                    devices={audioDevices}
-                    selectedId={selectedMicId}
-                    onSelect={switchMicrophone}
-                    onClose={() => setShowMicSelector(false)}
-                    type="mic"
-                  />
-                )}
               </div>
 
-              {/* === CAM BUTTON WITH DEVICE SELECTOR === */}
+              {/* === CAM BUTTON === */}
               <div className="relative flex items-center flex-shrink-0">
-                <button onClick={toggleCam} className={`p-2 sm:p-2.5 rounded-l-lg sm:rounded-l-xl transition-all duration-300 ${isCamOff ? 'bg-red-500 text-white shadow-[0_0_15px_rgba(239,68,68,0.4)]' : 'bg-white/10 text-white hover:bg-white/20'}`}>
+                <button onClick={toggleCam} className={`p-1.5 rounded-lg transition-all duration-300 ${isCamOff ? 'bg-red-500 text-white shadow-[0_0_15px_rgba(239,68,68,0.4)]' : 'bg-pink-500/20 text-pink-100 hover:bg-pink-500/30 border border-pink-500/30'}`}>
                   <div className="scale-75" dangerouslySetInnerHTML={{ __html: isCamOff ? ICONS.camOff : ICONS.cam }} />
                 </button>
-                <button
-                  onClick={() => { setShowCamSelector(!showCamSelector); setShowMicSelector(false); refreshDevices(); }}
-                  className={`p-1.5 sm:p-2 rounded-r-lg sm:rounded-r-xl border-l transition-all duration-300 ${isCamOff ? 'bg-red-600 border-red-400/30 text-white hover:bg-red-400' : 'bg-white/10 border-white/10 text-gray-400 hover:bg-white/20 hover:text-white'}`}
-                  title="Pilih Kamera"
-                >
-                  <div className="scale-75" dangerouslySetInnerHTML={{ __html: ICONS.chevronDown }} />
-                </button>
-                {showCamSelector && (
-                  <DeviceSelector
-                    devices={videoDevices}
-                    selectedId={selectedCamId}
-                    onSelect={switchCamera}
-                    onClose={() => setShowCamSelector(false)}
-                    type="cam"
-                  />
-                )}
               </div>
 
               {/* === SCREEN SHARE === */}
-              <button onClick={toggleScreen} className={`hidden md:block p-2 sm:p-2.5 rounded-lg sm:rounded-xl transition-all duration-300 flex-shrink-0 ${isSharing ? 'bg-green-500 text-white' : 'bg-white/10 text-white hover:bg-white/20'}`}>
+              <button onClick={toggleScreen} className={`hidden md:block p-1.5 rounded-lg transition-all duration-300 flex-shrink-0 ${isSharing ? 'bg-pink-500 text-white shadow-[0_0_15px_rgba(236,72,153,0.4)]' : 'bg-pink-500/20 text-pink-100 hover:bg-pink-500/30 border border-pink-500/30'}`}>
                 <div className="scale-75" dangerouslySetInnerHTML={{ __html: ICONS.screen }} />
               </button>
 
@@ -1664,7 +1632,7 @@ function MyVideoConference({ myName, bandwidthMode, setBandwidthMode, participan
                 <button
                   onClick={() => setOneOnOneMode(m => m === 'grid' ? 'remote-main' : 'grid')}
                   title={oneOnOneMode === 'grid' ? "Kembali ke mode PiP" : "Ubah ke mode Grid (Terbelah)"}
-                  className={`p-2 sm:p-2.5 rounded-lg sm:rounded-xl transition-all duration-300 flex-shrink-0 ${oneOnOneMode === 'grid' ? 'bg-indigo-600 shadow-[0_0_15px_rgba(79,70,229,0.4)]' : 'bg-white/10 hover:bg-white/20'} text-white`}
+                  className={`p-1.5 rounded-lg transition-all duration-300 flex-shrink-0 ${oneOnOneMode === 'grid' ? 'bg-pink-500 text-white shadow-[0_0_15px_rgba(236,72,153,0.4)]' : 'bg-pink-500/20 text-pink-100 hover:bg-pink-500/30 border border-pink-500/30'}`}
                 >
                   <div className="scale-75" dangerouslySetInnerHTML={{ __html: ICONS.layout }} />
                 </button>
@@ -1675,7 +1643,7 @@ function MyVideoConference({ myName, bandwidthMode, setBandwidthMode, participan
                 <button
                   onClick={handleToggleBrowserPiP}
                   title="Buka Popup Window"
-                  className="p-2 sm:p-2.5 rounded-lg sm:rounded-xl transition-all duration-300 flex-shrink-0 bg-white/10 text-white hover:bg-white/20"
+                  className="p-1.5 rounded-lg transition-all duration-300 flex-shrink-0 bg-pink-500/20 text-pink-100 hover:bg-pink-500/30 border border-pink-500/30"
                 >
                   <div className="scale-75" dangerouslySetInnerHTML={{ __html: ICONS.pip }} />
                 </button>
@@ -1685,10 +1653,10 @@ function MyVideoConference({ myName, bandwidthMode, setBandwidthMode, participan
               <button
                 onClick={isRecording ? stopRecording : startRecording}
                 title={isRecording ? `Berhenti Merekam (${Math.floor(recordingDuration/60).toString().padStart(2,'0')}:${(recordingDuration%60).toString().padStart(2,'0')})` : 'Rekam Layar'}
-                className={`p-2 sm:p-2.5 rounded-lg sm:rounded-xl transition-all duration-300 flex-shrink-0 ${
+                className={`p-1.5 rounded-lg transition-all duration-300 flex-shrink-0 ${
                   isRecording
                     ? 'bg-red-500 text-white shadow-[0_0_15px_rgba(239,68,68,0.5)] animate-pulse'
-                    : 'bg-white/10 text-white hover:bg-white/20'
+                    : 'bg-pink-500/20 text-pink-100 hover:bg-pink-500/30 border border-pink-500/30'
                 }`}
               >
                 <div className="scale-75" dangerouslySetInnerHTML={{ __html: isRecording ? ICONS.recordStop : ICONS.record }} />
@@ -1698,7 +1666,7 @@ function MyVideoConference({ myName, bandwidthMode, setBandwidthMode, participan
               <button
                 onClick={toggleDataSaver}
                 title={bandwidthMode === 'saver' ? 'Hemat -> HD' : bandwidthMode === 'hd' ? 'HD -> FHD' : 'FHD -> Hemat'}
-                className={`relative p-2 sm:p-2.5 rounded-lg sm:rounded-xl transition-all duration-300 flex-shrink-0
+                className={`relative p-1.5 rounded-lg transition-all duration-300 flex-shrink-0
                   ${bandwidthMode === 'saver'
                     ? 'bg-emerald-500/90 text-white hover:bg-emerald-400'
                     : bandwidthMode === 'hd'
@@ -1731,7 +1699,7 @@ function MyVideoConference({ myName, bandwidthMode, setBandwidthMode, participan
 
           <button
             onClick={() => { setIsChatOpen(!isChatOpen); if (!isChatOpen) setUnreadCount(0); }}
-            className={`relative p-2 sm:p-2.5 rounded-lg sm:rounded-xl transition-all duration-300 flex-shrink-0 ${isChatOpen ? 'bg-indigo-600 text-white shadow-[0_0_15px_rgba(79,70,229,0.4)]' : 'bg-white/10 text-white hover:bg-white/20'}`}
+            className={`relative p-1.5 rounded-lg transition-all duration-300 flex-shrink-0 ${isChatOpen ? 'bg-pink-500 text-white shadow-[0_0_15px_rgba(236,72,153,0.4)]' : 'bg-pink-500/20 text-pink-100 hover:bg-pink-500/30 border border-pink-500/30'}`}
           >
             <div className="scale-75" dangerouslySetInnerHTML={{ __html: ICONS.chat }} />
             {unreadCount > 0 && !isChatOpen && (
@@ -1741,7 +1709,7 @@ function MyVideoConference({ myName, bandwidthMode, setBandwidthMode, participan
             )}
           </button>
           <div className="w-px h-5 sm:h-6 bg-white/20 mx-1 flex-shrink-0"></div>
-          <button onClick={leave} className="p-2 sm:p-2.5 rounded-lg sm:rounded-xl bg-gradient-to-r flex-shrink-0 from-red-600 to-red-500 text-white shadow-lg hover:scale-105 active:scale-95 transition-all">
+          <button onClick={leave} className="p-1.5 rounded-lg bg-gradient-to-r flex-shrink-0 from-red-600 to-red-500 text-white shadow-lg hover:scale-105 active:scale-95 transition-all">
             <div className="rotate-[135deg] scale-75" dangerouslySetInnerHTML={{ __html: ICONS.hangup }} />
           </button>
         </div>

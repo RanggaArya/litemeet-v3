@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, screen, desktopCapturer, session } = require('electron');
+const { app, BrowserWindow, ipcMain, screen, desktopCapturer, session, dialog } = require('electron');
 const path = require('path');
 // child_process.fork digunakan di production mode
 const http = require('http');
@@ -172,6 +172,7 @@ async function createWindow() {
 
   // --- AUTO PIP LOGIC ---
   let pipTimeout = null;
+
   mainWindow.on('blur', () => {
     if (inMeeting && mainWindow) {
       const bounds = mainWindow.getBounds();
@@ -179,7 +180,7 @@ async function createWindow() {
       if (bounds.width > 400) {
         // Add a delay to prevent accidental PiP triggers that kill media tracks
         pipTimeout = setTimeout(() => {
-          if (!mainWindow.isFocused()) {
+          if (!mainWindow.isFocused() && !mainWindow.isMinimized()) {
             mainWindow.setAlwaysOnTop(true, 'floating', 1);
             mainWindow.setMinimumSize(150, 100);
             
@@ -208,8 +209,61 @@ async function createWindow() {
     }
   });
 
-  // Hapus mainWindow.on('focus') agar jendela tidak langsung membesar saat disentuh/digeser.
-  // Pengguna bisa me-maximize secara manual atau lewat tombol restore.
+  // Jika tombol minimize diklik: jika layar besar, jadikan PIP. Jika sudah PIP, biarkan minimize beneran.
+  mainWindow.on('minimize', (e) => {
+    if (inMeeting && mainWindow) {
+      const bounds = mainWindow.getBounds();
+      if (bounds.width > 400) {
+        e.preventDefault(); // Jangan minimize, tapi jadikan PIP
+        if (pipTimeout) clearTimeout(pipTimeout);
+        
+        mainWindow.setAlwaysOnTop(true, 'floating', 1);
+        mainWindow.setMinimumSize(150, 100);
+        
+        const { width } = screen.getPrimaryDisplay().workAreaSize;
+        const pipWidth = 302;
+        const pipHeight = 189;
+        
+        mainWindow.setBounds({
+          x: width - pipWidth - 20,
+          y: 20,
+          width: pipWidth,
+          height: pipHeight
+        }, true);
+      }
+    }
+  });
+
+  // Hapus alwaysOnTop jika kembali ke ukuran normal/maximized
+  mainWindow.on('maximize', () => {
+    if (mainWindow) mainWindow.setAlwaysOnTop(false);
+  });
+  mainWindow.on('unmaximize', () => {
+    if (mainWindow) mainWindow.setAlwaysOnTop(false);
+  });
+  mainWindow.on('resize', () => {
+    if (mainWindow && mainWindow.getBounds().width > 400) {
+      mainWindow.setAlwaysOnTop(false);
+    }
+  });
+
+  // --- CLOSE CONFIRMATION ---
+  mainWindow.on('close', (e) => {
+    const response = dialog.showMessageBoxSync(mainWindow, {
+      type: 'question',
+      buttons: ['Ya', 'Tidak'],
+      title: 'Konfirmasi Keluar',
+      message: 'Apakah Anda yakin ingin menutup aplikasi LiteMeet?',
+      defaultId: 1, // Default ke 'Tidak'
+      cancelId: 1
+    });
+
+    if (response === 1) { // User klik 'Tidak'
+      e.preventDefault();
+    } else {
+      if (nextProcess) nextProcess.kill(); // Pastikan server Next.js mati
+    }
+  });
 }
 
 app.whenReady().then(createWindow);
