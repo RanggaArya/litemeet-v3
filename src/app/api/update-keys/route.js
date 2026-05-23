@@ -37,21 +37,27 @@ export async function POST(req) {
         const updateEnv = async (key, value) => {
             const existing = envs.find(e => e.key === key);
             if (existing) {
-                // Update via PATCH
-                const patchRes = await fetch(`https://api.vercel.com/v9/projects/${projectId}/env/${existing.id}`, {
-                    method: 'PATCH',
-                    headers,
-                    body: JSON.stringify({ value, type: 'encrypted', target: ['production', 'preview', 'development'] })
+                // Sensitive vars cannot be PATCHed, they must be deleted and recreated
+                const delRes = await fetch(`https://api.vercel.com/v9/projects/${projectId}/env/${existing.id}`, {
+                    method: 'DELETE',
+                    headers
                 });
-                if (!patchRes.ok) throw new Error(`Gagal update ${key}`);
-            } else {
-                // Create via POST
-                const postRes = await fetch(`https://api.vercel.com/v10/projects/${projectId}/env`, {
+                if (!delRes.ok) {
+                    const txt = await delRes.text();
+                    throw new Error(`Gagal menghapus ${key} lama: ${txt}`);
+                }
+            }
+            
+            // Create via POST
+            const postRes = await fetch(`https://api.vercel.com/v10/projects/${projectId}/env`, {
                     method: 'POST',
                     headers,
                     body: JSON.stringify({ key, value, type: 'encrypted', target: ['production', 'preview', 'development'] })
                 });
-                if (!postRes.ok) throw new Error(`Gagal membuat ${key}`);
+                if (!postRes.ok) {
+                    const txt = await postRes.text();
+                    throw new Error(`Gagal membuat ${key}: ${txt}`);
+                }
             }
         };
 
