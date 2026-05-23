@@ -65,28 +65,27 @@ function MyParticipantTile({ trackRef, ...props }) {
 function DraggablePip({ trackRef, onTap }) {
   const pipRef = useRef(null);
   const [pos, setPos] = useState({ x: 0, y: 0 });
-  const drag = useRef({ active: false, startX: 0, startY: 0, origX: 0, origY: 0, moved: false });
+  const dragRef = useRef({ active: false, startX: 0, startY: 0, origX: 0, origY: 0, moved: false, startTime: 0 });
 
   const onTouchStart = (e) => {
     const t = e.touches[0];
-    drag.current = { active: true, startX: t.clientX, startY: t.clientY, origX: pos.x, origY: pos.y, moved: false };
+    dragRef.current = { active: true, startX: t.clientX, startY: t.clientY, origX: pos.x, origY: pos.y, moved: false, startTime: Date.now() };
   };
   const onTouchMove = (e) => {
-    if (!drag.current.active) return;
+    if (!dragRef.current.active) return;
     e.preventDefault();
     const t = e.touches[0];
-    drag.current.moved = true;
-    setPos({ x: drag.current.origX + (t.clientX - drag.current.startX), y: drag.current.origY + (t.clientY - drag.current.startY) });
+    const dx = Math.abs(t.clientX - dragRef.current.startX);
+    const dy = Math.abs(t.clientY - dragRef.current.startY);
+    if (dx > 5 || dy > 5) dragRef.current.moved = true;
+    setPos({ x: dragRef.current.origX + (t.clientX - dragRef.current.startX), y: dragRef.current.origY + (t.clientY - dragRef.current.startY) });
   };
-  const onTouchEnd = (e) => { 
-    if (drag.current.active && !drag.current.moved && onTap) {
-      onTap();
+  const onTouchEnd = () => { 
+    // Tap = sentuh tanpa geser dan kurang dari 300ms
+    if (dragRef.current.active && !dragRef.current.moved && (Date.now() - dragRef.current.startTime) < 300) {
+      if (onTap) onTap();
     }
-    drag.current.active = false; 
-  };
-  
-  const onClick = (e) => {
-    if (!drag.current.moved && onTap) onTap();
+    dragRef.current.active = false; 
   };
 
   return (
@@ -97,7 +96,6 @@ function DraggablePip({ trackRef, onTap }) {
       onTouchStart={onTouchStart}
       onTouchMove={onTouchMove}
       onTouchEnd={onTouchEnd}
-      onClick={onClick}
     >
       <MyParticipantTile trackRef={trackRef} />
     </div>
@@ -105,6 +103,8 @@ function DraggablePip({ trackRef, onTap }) {
 }
 
 // ============ SMART VIDEO LAYOUT ============
+// Selalu tampilkan 1 video besar + 1 video kecil di pojok (seperti VC biasa)
+// Baik di fullscreen maupun di mode PiP Android
 function SmartVideoLayout({ tracks, remoteCount, isPipMode }) {
   const { localParticipant } = useLocalParticipant();
   const [swapped, setSwapped] = useState(false);
@@ -130,10 +130,11 @@ function SmartVideoLayout({ tracks, remoteCount, isPipMode }) {
             : <div className="waiting-room"><div className="waiting-icon">👥</div><p>Menunggu peserta lain bergabung...</p></div>
         }
       </div>
-      {remoteTrackRaw && localTrackRaw && !isPipMode && <DraggablePip trackRef={pipTrack} onTap={() => setSwapped(!swapped)} />}
+      {remoteTrackRaw && localTrackRaw && <DraggablePip trackRef={pipTrack} onTap={() => setSwapped(!swapped)} />}
     </div>
   );
 }
+
 
 // ===================== MEETING COMPONENT =====================
 function MeetingView({ myName, bandwidthMode, setBandwidthMode, participantsRef, saveMeetingToHistory, onLeave }) {
@@ -387,7 +388,7 @@ function MeetingView({ myName, bandwidthMode, setBandwidthMode, participantsRef,
 
   return (
     <StealthContext.Provider value={{ stealthCamOn, stealthMicOn, myName }}>
-    <div className={`h-full w-full relative flex flex-col bg-gray-950 overflow-hidden ${stealthCamOn ? 'stealth-cam-global' : ''} ${stealthMicOn ? 'stealth-mic-global' : ''}`} style={{ fontFamily: 'sans-serif' }}>
+    <div className={`meeting-room ${stealthCamOn ? 'stealth-cam-global' : ''} ${stealthMicOn ? 'stealth-mic-global' : ''}`} style={{ fontFamily: 'sans-serif' }}>
       {connectionState === ConnectionState.Connecting && (
         <div style={{position: 'absolute', inset: 0, zIndex: 9999, background: 'rgba(17, 24, 39, 0.9)', backdropFilter: 'blur(4px)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center'}}>
           <div style={{width: 64, height: 64, border: '4px solid #374151', borderTopColor: '#ec4899', borderRadius: '50%', animation: 'spin 1s linear infinite', marginBottom: 24, boxShadow: '0 0 20px rgba(236,72,153,0.5)'}}></div>
@@ -546,6 +547,13 @@ export default function App() {
   const participantsRef = useRef(new Set());
   const [currentTime, setCurrentTime] = useState('');
 
+  // Minta izin notifikasi saat pertama kali app terbuka (Android 13+)
+  useEffect(() => {
+    if (isAndroid()) {
+      ForegroundCall.requestPermissions().catch(e => console.warn('Permission init:', e));
+    }
+  }, []);
+
   useEffect(() => {
     setHistory(loadHistory());
     const last = loadLastUser();
@@ -585,7 +593,10 @@ export default function App() {
         retryCountRef.current = 0; userLeftRef.current = false;
         meetingStartRef.current = Date.now(); participantsRef.current = new Set();
         saveLastUser(room, name);
-        if (isAndroid()) { ForegroundCall.startCall({ roomName: room }).catch(e => console.warn('FG service:', e)); }
+        if (isAndroid()) { 
+          ForegroundCall.requestPermissions().catch(e => console.warn('Perms req:', e));
+          ForegroundCall.startCall({ roomName: room }).catch(e => console.warn('FG service:', e)); 
+        }
       } else { setConnectionError(data.error || 'Gagal mendapatkan token.'); }
     } catch (e) { setConnectionError('Koneksi ke server gagal.'); }
     finally { setLoading(false); }
@@ -636,6 +647,22 @@ export default function App() {
 
     return (
       <div className="lobby">
+        {/* Floating bubbles background */}
+        <div style={{position:'absolute',inset:0,overflow:'hidden',pointerEvents:'none',zIndex:0}}>
+          {[...Array(6)].map((_, i) => (
+            <div key={i} style={{
+              position:'absolute',
+              width: 60 + i * 30,
+              height: 60 + i * 30,
+              borderRadius:'50%',
+              background: i % 2 === 0 ? 'rgba(236,72,153,0.06)' : 'rgba(99,102,241,0.06)',
+              left: `${10 + (i * 15) % 80}%`,
+              top: `${5 + (i * 18) % 70}%`,
+              animation: `float ${3 + i * 0.5}s ease-in-out infinite`,
+              animationDelay: `${i * 0.3}s`,
+            }} />
+          ))}
+        </div>
         <div className="lobby-card animate-slide-up">
           <div className="shine-effect" />
           <div style={{ position: 'absolute', top: 12, right: 16, fontSize: 10, fontFamily: 'monospace', color: '#9ca3af' }}>{currentTime}</div>
@@ -676,8 +703,7 @@ export default function App() {
               <div style={{ padding: '8px 12px', borderRadius: 10, background: '#fef2f2', border: '1px solid #fecaca', color: '#dc2626', fontSize: 11, fontWeight: 500 }}>⚠️ {connectionError}</div>
             )}
 
-            <button onClick={() => joinRoom(false)} disabled={loading} className="join-btn" style={{ position: 'relative', overflow: 'hidden' }}>
-              <div className="btn-shine" />
+            <button onClick={() => joinRoom(false)} disabled={loading} className="btn-join" style={{ position: 'relative', overflow: 'hidden' }}>
               {loading ? "Menghubungkan..." : "Mulai Meeting"}
             </button>
 

@@ -1,6 +1,7 @@
 package com.aralya.litemeet;
 
 import android.app.PictureInPictureParams;
+import android.content.Intent;
 import android.content.res.Configuration;
 import android.os.Build;
 import android.os.Bundle;
@@ -23,6 +24,21 @@ public class MainActivity extends BridgeActivity {
             Log.w(TAG, "Failed to register ForegroundCallPlugin: " + e.getMessage());
         }
         super.onCreate(savedInstanceState);
+        // Cek jika app dibuka oleh "Akhiri" dari notifikasi
+        handleFinishIntent(getIntent());
+    }
+
+    @Override
+    protected void onNewIntent(Intent intent) {
+        super.onNewIntent(intent);
+        handleFinishIntent(intent);
+    }
+
+    private void handleFinishIntent(Intent intent) {
+        if (intent != null && intent.getBooleanExtra("FINISH_APP", false)) {
+            Log.d(TAG, "FINISH_APP received — closing app");
+            finishAndRemoveTask();
+        }
     }
 
     @Override

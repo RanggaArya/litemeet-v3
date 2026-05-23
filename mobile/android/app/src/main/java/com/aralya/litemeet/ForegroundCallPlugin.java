@@ -6,13 +6,27 @@ import android.util.Log;
 import com.getcapacitor.Plugin;
 import com.getcapacitor.PluginCall;
 import com.getcapacitor.PluginMethod;
+import android.Manifest;
 import com.getcapacitor.annotation.CapacitorPlugin;
+import com.getcapacitor.annotation.Permission;
 
 /**
  * Capacitor Plugin untuk mengontrol CallForegroundService dari JavaScript.
  * Semua method dilindungi try-catch agar tidak crash.
  */
-@CapacitorPlugin(name = "ForegroundCall")
+@CapacitorPlugin(
+    name = "ForegroundCall",
+    permissions = {
+        @Permission(
+            strings = { Manifest.permission.POST_NOTIFICATIONS },
+            alias = "notifications"
+        ),
+        @Permission(
+            strings = { Manifest.permission.RECORD_AUDIO, Manifest.permission.CAMERA },
+            alias = "media"
+        )
+    }
+)
 public class ForegroundCallPlugin extends Plugin {
 
     private static final String TAG = "ForegroundCallPlugin";

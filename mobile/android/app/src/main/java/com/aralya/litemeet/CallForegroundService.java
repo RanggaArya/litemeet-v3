@@ -47,6 +47,16 @@ public class CallForegroundService extends Service {
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
         if (intent != null && ACTION_STOP.equals(intent.getAction())) {
+            // Tutup Activity (app) juga saat user tekan "Akhiri" di notifikasi
+            try {
+                Intent closeApp = new Intent(this, MainActivity.class);
+                closeApp.setFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
+                closeApp.putExtra("FINISH_APP", true);
+                closeApp.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                startActivity(closeApp);
+            } catch (Exception e) {
+                Log.w(TAG, "Gagal menutup app: " + e.getMessage());
+            }
             stopSelf();
             return START_NOT_STICKY;
         }
@@ -84,10 +94,15 @@ public class CallForegroundService extends Service {
             .addAction(android.R.drawable.ic_menu_close_clear_cancel, "Akhiri", pendingStop)
             .build();
 
-        // Mulai sebagai foreground service — HANYA microphone type
+        // Mulai sebagai foreground service — microphone dan camera type
         try {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                startForeground(NOTIF_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE);
+            if (Build.VERSION.SDK_INT >= 30) {
+                int type = ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE;
+                if (Build.VERSION.SDK_INT >= 34) {
+                    // Android 14+ needs explicit CAMERA type if accessing camera in bg
+                    type = ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE | ServiceInfo.FOREGROUND_SERVICE_TYPE_CAMERA;
+                }
+                startForeground(NOTIF_ID, notification, type);
             } else {
                 startForeground(NOTIF_ID, notification);
             }
