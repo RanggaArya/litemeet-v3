@@ -166,11 +166,16 @@ async function createWindow() {
     const checkServerReady = async (url) => {
       for (let i = 0; i < 30; i++) {
         try {
-          const res = await require('http').get(url);
-          if (res.statusCode === 200) return true;
-        } catch (e) {
-          await new Promise(r => setTimeout(r, 1000));
-        }
+          const isReady = await new Promise((resolve) => {
+            const req = require('http').get(url, (res) => {
+              if (res.statusCode === 200) resolve(true);
+              else resolve(false);
+            });
+            req.on('error', () => resolve(false));
+          });
+          if (isReady) return true;
+        } catch (e) {}
+        await new Promise(r => setTimeout(r, 1000));
       }
       return false;
     };
