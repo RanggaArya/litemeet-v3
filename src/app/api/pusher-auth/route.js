@@ -1,45 +1,37 @@
 import Pusher from 'pusher';
-import {
-    PUSHER_KEYS,
-    getPusherKey,
-    advancePusherKey,
-} from '../_lib/keys';
 
 export async function POST(req) {
-    const maxAttempts = PUSHER_KEYS.length;
-    let lastError = null;
-
     const data = await req.formData();
     const socketId = data.get('socket_id');
     const channelName = data.get('channel_name');
 
-    for (let attempt = 0; attempt < maxAttempts; attempt++) {
-        const currentKey = getPusherKey();
+    const appId = process.env.PUSHER_APP_ID;
+    const key = process.env.PUSHER_KEY;
+    const secret = process.env.PUSHER_SECRET;
+    const cluster = process.env.PUSHER_CLUSTER;
 
-        try {
-            const pusher = new Pusher({
-                appId: currentKey.appId,
-                key: currentKey.key,
-                secret: currentKey.secret,
-                cluster: currentKey.cluster,
-                useTLS: true,
-            });
-
-            const authResponse = pusher.authenticate(socketId, channelName);
-
-            console.log(`[Pusher Auth] ✅ Pusher key "${currentKey.appId}" berhasil`);
-
-            return Response.json(authResponse);
-        } catch (error) {
-            console.warn(`[Pusher Auth] ⚠️ Pusher key "${currentKey.appId}" gagal: ${error.message}`);
-            lastError = error;
-            advancePusherKey();
-        }
+    if (!appId || !key || !secret || !cluster) {
+        console.error('[Pusher Auth] ❌ Missing Pusher Keys in process.env');
+        return Response.json({ error: 'Server configuration error' }, { status: 500 });
     }
 
-    console.error(`[Pusher Auth] ❌ Semua Pusher keys gagal!`);
-    return Response.json(
-        { error: `Pusher auth gagal. Error: ${lastError?.message}` },
-        { status: 503 }
-    );
+    try {
+        const pusher = new Pusher({
+            appId,
+            key,
+            secret,
+            cluster,
+            useTLS: true,
+        });
+
+        const authResponse = pusher.authenticate(socketId, channelName);
+        console.log(`[Pusher Auth] ✅ Pusher key berhasil`);
+        return Response.json(authResponse);
+    } catch (error) {
+        console.error(`[Pusher Auth] ❌ Error: ${error.message}`);
+        return Response.json(
+            { error: `Pusher auth gagal. Error: ${error.message}` },
+            { status: 503 }
+        );
+    }
 }
