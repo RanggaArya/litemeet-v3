@@ -5,6 +5,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   isDesktop: true,
   onDesktopPicker: (callback) => ipcRenderer.on('show-desktop-picker', (_event, sources) => callback(sources)),
   selectDesktopSource: (sourceId) => ipcRenderer.send('desktop-picker-result', sourceId),
-  // Screen recording: save file to local Documents folder
   saveRecording: (fileName, arrayBuffer) => ipcRenderer.invoke('save-recording', fileName, arrayBuffer),
+  onRequestClose: (callback) => ipcRenderer.on('request-close', () => callback()),
+  confirmClose: () => ipcRenderer.send('confirm-close'),
 });

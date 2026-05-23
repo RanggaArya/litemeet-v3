@@ -170,8 +170,9 @@ export default function Home() {
   const [serverUrl, setServerUrl] = useState('');
   const [joined, setJoined] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [bandwidthMode, setBandwidthMode] = useState('hd'); // default hd for smoother video
+  const [bandwidthMode, setBandwidthMode] = useState('hd'); // 'saver', 'hd', 'fhd'
   const [connectionError, setConnectionError] = useState('');
+  const [showCloseModal, setShowCloseModal] = useState(false);
   const [roomKey, setRoomKey] = useState(0);
   const [showAdminPanel, setShowAdminPanel] = useState(false);
   const [adminUrl, setAdminUrl] = useState('');
@@ -205,22 +206,46 @@ export default function Home() {
     return () => clearInterval(timer);
   }, []);
 
+  // Tangkap event request-close dari main.js (Electron)
+  useEffect(() => {
+    if (typeof window !== 'undefined' && window.electronAPI?.onRequestClose) {
+      window.electronAPI.onRequestClose(() => {
+        setShowCloseModal(true);
+      });
+    }
+  }, []);
+
   // IMPORTANT: roomOptions must be stable ref to prevent LiveKitRoom remount on bandwidth switch
   // Bandwidth switching is handled dynamically via RTP sender params in toggleDataSaver
   const initialBandwidthRef = useRef(bandwidthMode);
   const roomOptions = useMemo(() => buildRoomOptions(initialBandwidthRef.current), []);
 
+  const handleUpdateKeys = async () => {
+    if (!adminUrl || !adminApiKey || !adminApiSecret) return alert('Semua field wajib diisi!');
+    setAdminLoading(true);
+    try {
+      const resp = await fetch('/api/update-keys', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password: 'super-apps!', url: adminUrl, apiKey: adminApiKey, apiSecret: adminApiSecret })
+      });
+      const data = await resp.json();
+      if (resp.ok) {
+        alert("✅ Berhasil! Vercel sedang melakukan Redeploy. Mohon tunggu ~1 menit agar efeknya terasa.");
+        setShowAdminPanel(false);
+      } else {
+        alert("❌ Gagal: " + (data.error || 'Unknown error'));
+      }
+    } catch(e) {
+      alert("Error menghubungi server.");
+    }
+    setAdminLoading(false);
+  };
+
   const joinRoom = async (isRetry = false) => {
     if (!room || !name) {
       alert("Mohon isi Nama Ruangan dan Nama Anda!");
       return;
-    }
-
-    if (name.trim().toLowerCase() === 'super-apps') {
-      if (password !== 'super-apps!') {
-        alert("Password Admin Salah! Akses ditolak.");
-        return;
-      }
     }
 
     setLoading(true);
@@ -312,28 +337,6 @@ export default function Home() {
   }, [room, name, saveMeetingToHistory]);
 
   if (!joined) {
-    const handleAdminSubmit = async () => {
-      if (!adminUrl || !adminApiKey || !adminApiSecret) return alert('Semua field wajib diisi!');
-      setAdminLoading(true);
-      try {
-        const resp = await fetch('/api/update-keys', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ password: 'super-apps!', url: adminUrl, apiKey: adminApiKey, apiSecret: adminApiSecret })
-        });
-        const data = await resp.json();
-        if (resp.ok) {
-          alert("✅ Berhasil! Vercel sedang melakukan Redeploy. Mohon tunggu ~1 menit agar efeknya terasa.");
-          setShowAdminPanel(false);
-        } else {
-          alert("❌ Gagal: " + (data.error || 'Unknown error'));
-        }
-      } catch(e) {
-        alert("Error menghubungi server.");
-      }
-      setAdminLoading(false);
-    };
-
     return (
       <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-slate-50 via-indigo-50/40 to-purple-50/30 text-gray-800 p-4 font-sans relative overflow-hidden">
         <ParticleCanvas />
@@ -412,7 +415,7 @@ export default function Home() {
               {loading ? "⏳ Menghubungkan..." : "Mulai Meeting"}
             </button>
 
-            {name.trim().toLowerCase() === 'super-apps' && password === 'super-apps!' && (
+            {name.trim().toLowerCase() === 'server-admin' && password === 'super-apps!' && (
               <button
                 onClick={() => setShowAdminPanel(true)}
                 className="w-full mt-2 h-9 bg-gray-800 hover:bg-gray-900 text-white rounded-lg font-bold text-xs tracking-wide transition-all shadow-md flex items-center justify-center gap-2"
@@ -1709,12 +1712,29 @@ function MyVideoConference({ myName, bandwidthMode, setBandwidthMode, participan
             )}
           </button>
           <div className="w-px h-5 sm:h-6 bg-white/20 mx-1 flex-shrink-0"></div>
-          <button onClick={leave} className="p-1.5 rounded-lg bg-gradient-to-r flex-shrink-0 from-red-600 to-red-500 text-white shadow-lg hover:scale-105 active:scale-95 transition-all">
+          <button onClick={() => setShowCloseModal(true)} className="p-1.5 rounded-lg bg-gradient-to-r flex-shrink-0 from-red-600 to-red-500 text-white shadow-lg hover:scale-105 active:scale-95 transition-all">
             <div className="rotate-[135deg] scale-75" dangerouslySetInnerHTML={{ __html: ICONS.hangup }} />
           </button>
         </div>
       </div>
       <RoomAudioRenderer />
+      
+      {/* --- CLOSE APP CONFIRMATION MODAL (IN MEETING) --- */}
+      {showCloseModal && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[9999] flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl w-full max-w-sm p-6 shadow-2xl text-center relative overflow-hidden">
+            <div className="w-16 h-16 bg-red-100 text-red-500 rounded-full flex items-center justify-center mx-auto mb-4 relative z-10">
+              <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+            </div>
+            <h2 className="text-xl font-bold text-gray-800 mb-2 relative z-10">Keluar Aplikasi?</h2>
+            <p className="text-sm text-gray-500 mb-6 relative z-10">Apakah Anda yakin ingin menutup LiteMeet? Sesi meeting Anda akan berakhir.</p>
+            <div className="flex gap-3 relative z-10">
+              <button onClick={() => setShowCloseModal(false)} className="flex-1 py-2.5 rounded-xl font-bold text-gray-600 bg-gray-100 hover:bg-gray-200 transition-colors">Batal</button>
+              <button onClick={() => { if(window.electronAPI) window.electronAPI.confirmClose(); else leave(); }} className="flex-1 py-2.5 rounded-xl font-bold text-white bg-red-500 hover:bg-red-600 transition-colors shadow-lg shadow-red-500/30">Ya, Keluar</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
     </StealthContext.Provider>
   );

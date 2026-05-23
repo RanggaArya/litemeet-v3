@@ -5,7 +5,6 @@ const http = require('http');
 const fs = require('fs');
 
 let mainWindow;
-let nextProcess;
 let inMeeting = false;
 let currentScreenShareCallback = null;
 
@@ -85,89 +84,9 @@ async function createWindow() {
     mainWindow.loadURL('http://localhost:3000');
     mainWindow.webContents.openDevTools();
   } else {
-    // Dalam mode packaged, file asarUnpack ada di app.asar.unpacked
-    const resourcesDir = __dirname.replace('app.asar', 'app.asar.unpacked');
-
-    // --- Load environment variables dari .env.local ---
-    const envPath = path.join(resourcesDir, '.env.local');
-    const envVars = {};
-    if (fs.existsSync(envPath)) {
-      const envContent = fs.readFileSync(envPath, 'utf-8');
-      envContent.split('\n').forEach(line => {
-        line = line.replace(/\r/g, '').trim();
-        if (line && !line.startsWith('#')) {
-          const eqIndex = line.indexOf('=');
-          if (eqIndex > 0) {
-            const key = line.substring(0, eqIndex).trim();
-            const value = line.substring(eqIndex + 1).trim();
-            envVars[key] = value;
-          }
-        }
-      });
-    }
-
-    // --- Copy static & public ke standalone folder jika belum ada ---
-    const standaloneDir = path.join(resourcesDir, '.next', 'standalone');
-    const staticSrc = path.join(resourcesDir, '.next', 'static');
-    const staticDest = path.join(standaloneDir, '.next', 'static');
-    const publicSrc = path.join(resourcesDir, 'public');
-    const publicDest = path.join(standaloneDir, 'public');
-
-    // Copy fungsi rekursif
-    function copyDirSync(src, dest) {
-      if (!fs.existsSync(src)) return;
-      if (!fs.existsSync(dest)) fs.mkdirSync(dest, { recursive: true });
-      const entries = fs.readdirSync(src, { withFileTypes: true });
-      for (const entry of entries) {
-        const srcPath = path.join(src, entry.name);
-        const destPath = path.join(dest, entry.name);
-        if (entry.isDirectory()) {
-          copyDirSync(srcPath, destPath);
-        } else {
-          fs.copyFileSync(srcPath, destPath);
-        }
-      }
-    }
-
-    if (!fs.existsSync(staticDest)) {
-      console.log('Copying .next/static to standalone...');
-      copyDirSync(staticSrc, staticDest);
-    }
-    if (!fs.existsSync(publicDest)) {
-      console.log('Copying public to standalone...');
-      copyDirSync(publicSrc, publicDest);
-    }
-
-    // Jalankan bundled Next.js standalone server via fork
-    const serverPath = path.join(standaloneDir, 'server.js');
-    console.log('Starting Next.js server from:', serverPath);
-    console.log('Standalone dir:', standaloneDir);
-
-    // Gunakan fork dengan ELECTRON_RUN_AS_NODE=1 agar Electron bertindak sebagai Node.js
-    const { fork } = require('child_process');
-    nextProcess = fork(serverPath, [], {
-      env: {
-        ...process.env,
-        ...envVars,
-        PORT: '3000',
-        HOSTNAME: '127.0.0.1',
-        NODE_ENV: 'production',
-        ELECTRON_RUN_AS_NODE: '1'
-      },
-      cwd: standaloneDir,
-      stdio: ['pipe', 'pipe', 'pipe', 'ipc']
-    });
-
-    nextProcess.stdout.on('data', data => console.log(`NextJS: ${data}`));
-    nextProcess.stderr.on('data', data => console.error(`NextJS Error: ${data}`));
-    nextProcess.on('error', err => console.error('Fork error:', err));
-    nextProcess.on('exit', (code) => console.log('Next.js server exited with code:', code));
-
-    const ready = await checkServerReady('http://127.0.0.1:3000');
-    if (!ready) {
-      console.error('Next.js server failed to start!');
-    }
-    mainWindow.loadURL('http://127.0.0.1:3000');
+    // Di mode production, langsung load versi Web Vercel
+    // Ini menghilangkan bug 'Server configuration error' karena ENV dari lokal tidak perlu dibaca.
+    mainWindow.loadURL('https://litemeet-v3.vercel.app');
   }
 
   // --- AUTO PIP LOGIC ---
@@ -247,34 +166,28 @@ async function createWindow() {
     }
   });
 
-  // --- CLOSE CONFIRMATION ---
+  // --- CLOSE CONFIRMATION (CUSTOM MODAL) ---
   mainWindow.on('close', (e) => {
-    const response = dialog.showMessageBoxSync(mainWindow, {
-      type: 'question',
-      buttons: ['Ya', 'Tidak'],
-      title: 'Konfirmasi Keluar',
-      message: 'Apakah Anda yakin ingin menutup aplikasi LiteMeet?',
-      defaultId: 1, // Default ke 'Tidak'
-      cancelId: 1
-    });
-
-    if (response === 1) { // User klik 'Tidak'
+    if (!app.isQuitting) {
       e.preventDefault();
-    } else {
-      if (nextProcess) nextProcess.kill(); // Pastikan server Next.js mati
+      mainWindow.webContents.send('request-close'); // Minta React untuk tampilkan modal cantik
     }
+  });
+
+  ipcMain.on('confirm-close', () => {
+    app.isQuitting = true;
+    app.quit();
   });
 }
 
 app.whenReady().then(createWindow);
 
 app.on('window-all-closed', () => {
-  if (nextProcess) nextProcess.kill();
   if (process.platform !== 'darwin') app.quit();
 });
 
 app.on('before-quit', () => {
-  if (nextProcess) nextProcess.kill();
+  // tidak ada NextProcess
 });
 
 ipcMain.on('set-in-meeting', (event, status) => {
