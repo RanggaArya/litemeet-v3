@@ -45,34 +45,34 @@ const ICONS = {
 const BANDWIDTH_MODES = {
   saver: {
     label: 'Mode Hemat',
-    sublabel: 'Ramah kuota · ~60 MB/jam',
+    sublabel: 'Ramah kuota · ~80 MB/jam',
     icon: '📶',
     resolution: VideoPresets.h360.resolution,
-    maxBitrate: 120_000,
+    maxBitrate: 180_000,
     maxFramerate: 15,
-    screenShareBitrate: 150_000,
-    screenShareFps: 8,
+    screenShareBitrate: 300_000,
+    screenShareFps: 5,
     simulcastLayers: [],
   },
   hd: {
     label: 'Mode HD',
-    sublabel: 'Kualitas tinggi · ~500 MB/jam',
+    sublabel: 'Kualitas standar · ~500 MB/jam',
     icon: '🎬',
     resolution: VideoPresets.h720.resolution,
-    maxBitrate: 800_000,
+    maxBitrate: 1_000_000,
     maxFramerate: 24,
-    screenShareBitrate: 800_000,
+    screenShareBitrate: 1_500_000,
     screenShareFps: 15,
     simulcastLayers: [VideoPresets.h180, VideoPresets.h360],
   },
   ultra: {
     label: 'Mode Ultra',
-    sublabel: 'Sangat jernih 60fps · ~3 GB/jam',
+    sublabel: 'Sangat jernih 30fps · ~1.5 GB/jam',
     icon: '🎥',
     resolution: VideoPresets.h1080.resolution,
-    maxBitrate: 4_000_000,
-    maxFramerate: 60,
-    screenShareBitrate: 4_000_000,
+    maxBitrate: 2_500_000,
+    maxFramerate: 30,
+    screenShareBitrate: 3_000_000,
     screenShareFps: 30,
     simulcastLayers: [VideoPresets.h360, VideoPresets.h720],
   },
@@ -96,6 +96,9 @@ function buildRoomOptions(mode) {
       facingMode: 'user',
     },
     publishDefaults: {
+      audioEncoding: {
+        maxBitrate: 48_000,
+      },
       videoEncoding: {
         maxBitrate: cfg.maxBitrate,
         maxFramerate: cfg.maxFramerate,
@@ -105,7 +108,7 @@ function buildRoomOptions(mode) {
         maxFramerate: cfg.screenShareFps,
       },
       dtx: true,
-      red: false,
+      red: true,
       stopMicTrackOnMute: false,
       videoSimulcastLayers: cfg.simulcastLayers,
     },
@@ -399,7 +402,7 @@ export default function Home() {
                 : 'bg-purple-50 border border-purple-100 text-purple-600'
               }`}>
                 <span>{bandwidthMode === 'saver' ? '🌿' : bandwidthMode === 'hd' ? '🎬' : '⚠️'}</span>
-                <span>{bandwidthMode === 'saver' ? 'Hemat ~85% (360p)' : bandwidthMode === 'hd' ? 'Kualitas tinggi (720p)' : 'Sangat Boros ~2.5 GB/jam (1080p)'}</span>
+                <span>{bandwidthMode === 'saver' ? 'Hemat ~85% (360p)' : bandwidthMode === 'hd' ? 'Kualitas standar (720p)' : 'Sangat Jernih ~1.5 GB/jam (1080p)'}</span>
               </div>
             </div>
 
@@ -423,7 +426,7 @@ export default function Home() {
               </button>
             )}
 
-            <p className="text-center text-[9px] text-gray-300 font-medium mt-1">Powered by Aralya @2026 • v0.1.5</p>
+            <p className="text-center text-[9px] text-gray-300 font-medium mt-1">Powered by Aralya @2026 • v0.1.6</p>
           </div>
         </div>
 
@@ -518,7 +521,7 @@ export default function Home() {
         )}
 
         {/* Version info */}
-        <div className="absolute bottom-3 right-4 z-10 text-[9px] text-gray-400/60 font-mono">App Version 0.1.5</div>
+        <div className="absolute bottom-3 right-4 z-10 text-[9px] text-gray-400/60 font-mono">App Version 0.1.6</div>
       </div>
     );
   }

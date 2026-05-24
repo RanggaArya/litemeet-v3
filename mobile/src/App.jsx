@@ -766,7 +766,7 @@ export default function App() {
               </button>
             )}
 
-            <p style={{ textAlign: 'center', fontSize: 9, color: '#d1d5db', fontWeight: 500 }}>Powered by Aralya @2026 • v0.1.5</p>
+            <p style={{ textAlign: 'center', fontSize: 9, color: '#d1d5db', fontWeight: 500 }}>Powered by Aralya @2026 • v0.1.6</p>
           </div>
         </div>
 

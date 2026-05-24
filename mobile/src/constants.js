@@ -19,20 +19,20 @@ export const ICONS = {
 export const BANDWIDTH_MODES = {
   saver: {
     label: 'Hemat', icon: '📶',
-    resolution: VideoPresets.h360.resolution, maxBitrate: 120_000, maxFramerate: 15,
-    screenShareBitrate: 150_000, screenShareFps: 8,
+    resolution: VideoPresets.h360.resolution, maxBitrate: 180_000, maxFramerate: 15,
+    screenShareBitrate: 300_000, screenShareFps: 5,
     simulcastLayers: [],
   },
   hd: {
     label: 'HD', icon: '🎬',
-    resolution: VideoPresets.h720.resolution, maxBitrate: 800_000, maxFramerate: 24,
-    screenShareBitrate: 800_000, screenShareFps: 15,
+    resolution: VideoPresets.h720.resolution, maxBitrate: 1_000_000, maxFramerate: 24,
+    screenShareBitrate: 1_500_000, screenShareFps: 15,
     simulcastLayers: [VideoPresets.h180, VideoPresets.h360],
   },
   ultra: {
     label: 'Ultra', icon: '🎥',
-    resolution: VideoPresets.h1080.resolution, maxBitrate: 4_000_000, maxFramerate: 60,
-    screenShareBitrate: 4_000_000, screenShareFps: 30,
+    resolution: VideoPresets.h1080.resolution, maxBitrate: 2_500_000, maxFramerate: 30,
+    screenShareBitrate: 3_000_000, screenShareFps: 30,
     simulcastLayers: [VideoPresets.h360, VideoPresets.h720],
   },
 };
@@ -48,9 +48,10 @@ export function buildRoomOptions(mode) {
     },
     videoCaptureDefaults: { facingMode: 'user' },
     publishDefaults: {
+      audioEncoding: { maxBitrate: 48_000 },
       videoEncoding: { maxBitrate: cfg.maxBitrate, maxFramerate: cfg.maxFramerate },
       screenShareEncoding: { maxBitrate: cfg.screenShareBitrate, maxFramerate: cfg.screenShareFps },
-      dtx: true, red: false, stopMicTrackOnMute: false, videoSimulcastLayers: cfg.simulcastLayers,
+      dtx: true, red: true, stopMicTrackOnMute: false, videoSimulcastLayers: cfg.simulcastLayers,
     },
   };
 }
