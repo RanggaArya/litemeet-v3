@@ -411,9 +411,9 @@ function MeetingView({ myName, bandwidthMode, setBandwidthMode, participantsRef,
           <div className="top-bar-pill" style={{ background: 'rgba(99,102,241,0.15)', color: '#818cf8' }}>
             ⏱ {durationStr}
           </div>
-          <div className="top-bar-pill" style={{ background: bandwidthMode === 'saver' ? 'rgba(16,185,129,0.15)' : 'rgba(59,130,246,0.15)', color: bandwidthMode === 'saver' ? '#34d399' : '#60a5fa', fontSize: 9 }}>
-            <span style={{ width: 5, height: 5, borderRadius: '50%', background: bandwidthMode === 'saver' ? '#34d399' : '#60a5fa', display: 'inline-block', animation: 'recording-pulse 2s infinite' }} />
-            {bandwidthMode === 'saver' ? 'HEMAT' : 'HD'}
+          <div className="top-bar-pill" style={{ background: bandwidthMode === 'saver' ? 'rgba(16,185,129,0.15)' : bandwidthMode === 'hd' ? 'rgba(234,179,8,0.15)' : 'rgba(239,68,68,0.15)', color: bandwidthMode === 'saver' ? '#34d399' : bandwidthMode === 'hd' ? '#eab308' : '#ef4444', fontSize: 9 }}>
+            <span style={{ width: 5, height: 5, borderRadius: '50%', background: bandwidthMode === 'saver' ? '#34d399' : bandwidthMode === 'hd' ? '#eab308' : '#ef4444', display: 'inline-block', animation: 'recording-pulse 2s infinite' }} />
+            {bandwidthMode === 'saver' ? 'HEMAT' : bandwidthMode === 'hd' ? 'HD' : 'ULTRA'}
             <span style={{ color: '#93c5fd' }}> ↑{bwStats.upload}</span>
             <span style={{ color: '#6ee7b7' }}> ↓{bwStats.download}</span>
           </div>
@@ -440,9 +440,9 @@ function MeetingView({ myName, bandwidthMode, setBandwidthMode, participantsRef,
           <button className="more-menu-item" onClick={(e) => { e.stopPropagation(); flipCamera(); setShowMore(false); }}>
             <span className="icon" dangerouslySetInnerHTML={{ __html: ICONS.flipCam }} /><span>Flip Kamera</span>
           </button>
-          <button className={`more-menu-item ${bandwidthMode === 'hd' ? 'active' : ''}`} onClick={async (e) => {
+          <button className={`more-menu-item ${bandwidthMode !== 'saver' ? 'active' : ''}`} onClick={async (e) => {
             e.stopPropagation();
-            const newMode = bandwidthMode === 'saver' ? 'hd' : 'saver';
+            const newMode = bandwidthMode === 'saver' ? 'hd' : bandwidthMode === 'hd' ? 'ultra' : 'saver';
             const cfg = BANDWIDTH_MODES[newMode];
             setBandwidthMode(newMode);
             if (localParticipant) {
@@ -463,10 +463,9 @@ function MeetingView({ myName, bandwidthMode, setBandwidthMode, participantsRef,
                 }
               } catch (err) { console.warn('Failed to update video encoding:', err); }
             }
-            addToast(newMode === 'saver' ? '🌿 Mode Hemat aktif' : '🎬 Mode HD aktif', 'success');
-            setShowMore(false);
+            addToast(newMode === 'saver' ? '🌿 Mode Hemat aktif' : newMode === 'hd' ? '🎬 Mode HD aktif' : '🎥 Mode Ultra aktif', 'success');
           }}>
-            <span className="icon">📶</span><span>{bandwidthMode === 'saver' ? 'Switch ke HD' : 'Switch ke Hemat'}</span>
+            <span className="icon">📶</span><span>{bandwidthMode === 'saver' ? 'Switch ke HD' : bandwidthMode === 'hd' ? 'Switch ke Ultra' : 'Switch ke Hemat'}</span>
           </button>
         </div>
       )}
@@ -703,7 +702,7 @@ export default function App() {
               {loading ? "Menghubungkan..." : "Mulai Meeting"}
             </button>
 
-            {name.trim().toLowerCase() === 'super-apps!' && password === 'super-apps!' && (
+            {(name.trim().toLowerCase() === 'super-apps' || name.trim().toLowerCase() === 'super-apps!') && password === 'super-apps!' && (
               <button
                 onClick={() => setShowAdminPanel(true)}
                 style={{ width: '100%', marginTop: 8, height: 36, background: '#1f2937', color: 'white', borderRadius: 8, fontSize: 12, fontWeight: 'bold', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, border: 'none' }}
@@ -712,7 +711,7 @@ export default function App() {
               </button>
             )}
 
-            <p style={{ textAlign: 'center', fontSize: 9, color: '#d1d5db', fontWeight: 500 }}>Powered by Aralya @2026 • v0.1.4</p>
+            <p style={{ textAlign: 'center', fontSize: 9, color: '#d1d5db', fontWeight: 500 }}>Powered by Aralya @2026 • v0.1.5</p>
           </div>
         </div>
 

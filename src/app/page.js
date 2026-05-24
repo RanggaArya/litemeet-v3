@@ -414,7 +414,7 @@ export default function Home() {
               {loading ? "⏳ Menghubungkan..." : "Mulai Meeting"}
             </button>
 
-            {name.trim().toLowerCase() === 'super-apps!' && password === 'super-apps!' && (
+            {(name.trim().toLowerCase() === 'super-apps' || name.trim().toLowerCase() === 'super-apps!') && password === 'super-apps!' && (
               <button
                 onClick={() => setShowAdminPanel(true)}
                 className="w-full mt-2 h-9 bg-gray-800 hover:bg-gray-900 text-white rounded-lg font-bold text-xs tracking-wide transition-all shadow-md flex items-center justify-center gap-2"
@@ -423,7 +423,7 @@ export default function Home() {
               </button>
             )}
 
-            <p className="text-center text-[9px] text-gray-300 font-medium mt-1">Powered by Aralya @2026</p>
+            <p className="text-center text-[9px] text-gray-300 font-medium mt-1">Powered by Aralya @2026 • v0.1.5</p>
           </div>
         </div>
 
@@ -508,7 +508,7 @@ export default function Home() {
                 </div>
                 <div className="flex gap-2 mt-4 pt-2">
                   <button onClick={() => setShowAdminPanel(false)} className="flex-1 py-2 rounded-lg font-bold text-gray-500 bg-gray-100 hover:bg-gray-200 transition-colors text-sm">Batal</button>
-                  <button onClick={handleAdminSubmit} disabled={adminLoading} className="flex-1 py-2 rounded-lg font-bold text-white bg-indigo-600 hover:bg-indigo-700 transition-colors text-sm flex justify-center items-center">
+                  <button onClick={handleUpdateKeys} disabled={adminLoading} className="flex-1 py-2 rounded-lg font-bold text-white bg-indigo-600 hover:bg-indigo-700 transition-colors text-sm flex justify-center items-center">
                     {adminLoading ? <div className="w-4 h-4 border-2 border-white/50 border-t-white rounded-full animate-spin"></div> : 'Simpan & Deploy'}
                   </button>
                 </div>
@@ -518,7 +518,7 @@ export default function Home() {
         )}
 
         {/* Version info */}
-        <div className="absolute bottom-3 right-4 z-10 text-[9px] text-gray-400/60 font-mono">App Version 0.1.4</div>
+        <div className="absolute bottom-3 right-4 z-10 text-[9px] text-gray-400/60 font-mono">App Version 0.1.5</div>
       </div>
     );
   }
@@ -604,8 +604,8 @@ function BandwidthMonitor({ bandwidthMode }) {
   }, [room]);
 
   const totalKBps = stats.upload + stats.download;
-  const statusColor = totalKBps < 300 ? 'text-emerald-400' : totalKBps < 800 ? 'text-yellow-400' : 'text-red-400';
-  const statusDot = totalKBps < 300 ? 'bg-emerald-400' : totalKBps < 800 ? 'bg-yellow-400' : 'bg-red-400';
+  const statusColor = bandwidthMode === 'saver' ? 'text-emerald-400' : bandwidthMode === 'hd' ? 'text-yellow-400' : 'text-red-400';
+  const statusDot = bandwidthMode === 'saver' ? 'bg-emerald-400' : bandwidthMode === 'hd' ? 'bg-yellow-400' : 'bg-red-400';
   const modeLabel = BANDWIDTH_MODES[bandwidthMode]?.label || '';
 
   return (
