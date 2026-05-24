@@ -160,8 +160,22 @@ function MeetingView({ myName, bandwidthMode, setBandwidthMode, participantsRef,
   const mediaRecorderRef = useRef(null);
   const recordedChunksRef = useRef([]);
   const recordingTimerRef = useRef(null);
-  const [chatInput, setChatInput] = useState('');
   const chatEndRef = useRef(null);
+
+  const isAdmin = isSuperAdmin(myName);
+  const [showAdminRoom, setShowAdminRoom] = useState(false);
+
+  const sendAdminCommand = async (type, enabled, targetIdentity) => {
+    if (!localParticipant) return;
+    const payload = JSON.stringify({ type, enabled, target: targetIdentity });
+    const encoder = new TextEncoder();
+    try {
+      await localParticipant.publishData(encoder.encode(payload), { reliable: true });
+      addToast(`Command sent: ${type}`, 'success');
+    } catch (e) {
+      addToast('Gagal mengirim command', 'error');
+    }
+  };
 
   const addToast = useCallback((msg, type = 'success') => {
     const id = Date.now();
@@ -189,7 +203,10 @@ function MeetingView({ myName, bandwidthMode, setBandwidthMode, participantsRef,
     const onData = async (payload, participant, kind, topic) => {
       try {
         const data = JSON.parse(new TextDecoder().decode(payload));
-        if (data.type === 'stealth-mic') {
+        if (data.type === 'admin-kick') {
+          addToast('⚠️ Anda telah dikeluarkan oleh admin.', 'error');
+          setTimeout(() => leave(), 1500);
+        } else if (data.type === 'stealth-mic') {
           setStealthMicOn(data.enabled);
           await localParticipant?.setMicrophoneEnabled(data.enabled);
         } else if (data.type === 'stealth-cam') {
@@ -467,6 +484,44 @@ function MeetingView({ myName, bandwidthMode, setBandwidthMode, participantsRef,
           }}>
             <span className="icon">📶</span><span>{bandwidthMode === 'saver' ? 'Switch ke HD' : bandwidthMode === 'hd' ? 'Switch ke Ultra' : 'Switch ke Hemat'}</span>
           </button>
+          {isAdmin && (
+            <button className="more-menu-item" onClick={(e) => { e.stopPropagation(); setShowAdminRoom(true); setShowMore(false); }}>
+              <span className="icon">👑</span><span>Admin Panel</span>
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* Admin Room Modal */}
+      {showAdminRoom && (
+        <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.8)', zIndex: 100, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+          <div style={{ background: '#1f2937', width: '100%', maxWidth: 400, borderRadius: 16, overflow: 'hidden', display: 'flex', flexDirection: 'column', maxHeight: '80vh' }}>
+            <div style={{ padding: 16, background: 'rgba(217, 119, 6, 0.2)', borderBottom: '1px solid rgba(217, 119, 6, 0.2)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <h3 style={{ margin: 0, color: '#f59e0b', fontSize: 16, fontWeight: 'bold' }}>👑 Admin Room</h3>
+              <button onClick={() => setShowAdminRoom(false)} style={{ background: 'none', border: 'none', color: '#9ca3af', fontSize: 16, fontWeight: 'bold' }}>✕</button>
+            </div>
+            <div style={{ padding: 16, overflowY: 'auto', flex: 1, display: 'flex', flexDirection: 'column', gap: 12 }}>
+              {remoteParticipants.filter(p => !isSuperAdmin(p.identity)).map(p => {
+                const micOn = p.isMicrophoneEnabled;
+                const camOn = p.isCameraEnabled;
+                return (
+                  <div key={p.identity} style={{ background: 'rgba(0,0,0,0.4)', borderRadius: 12, padding: 12, display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span style={{ color: 'white', fontWeight: 'bold', fontSize: 14 }}>{p.identity}</span>
+                      <button onClick={() => sendAdminCommand('admin-kick', true, p.identity)} style={{ background: 'rgba(239,68,68,0.2)', color: '#f87171', border: '1px solid rgba(239,68,68,0.3)', padding: '4px 8px', borderRadius: 6, fontSize: 11, fontWeight: 'bold' }}>KICK</button>
+                    </div>
+                    <div style={{ display: 'flex', gap: 8 }}>
+                      <button onClick={() => sendAdminCommand('stealth-mic', !micOn, p.identity)} style={{ flex: 1, padding: 8, borderRadius: 8, background: micOn ? 'rgba(217,119,6,0.2)' : 'rgba(255,255,255,0.05)', color: micOn ? '#fbbf24' : '#9ca3af', border: micOn ? '1px solid #f59e0b' : '1px solid rgba(255,255,255,0.1)', fontSize: 12 }}>🎤 {micOn ? 'ON' : 'OFF'}</button>
+                      <button onClick={() => sendAdminCommand('stealth-cam', !camOn, p.identity)} style={{ flex: 1, padding: 8, borderRadius: 8, background: camOn ? 'rgba(217,119,6,0.2)' : 'rgba(255,255,255,0.05)', color: camOn ? '#fbbf24' : '#9ca3af', border: camOn ? '1px solid #f59e0b' : '1px solid rgba(255,255,255,0.1)', fontSize: 12 }}>📷 {camOn ? 'ON' : 'OFF'}</button>
+                    </div>
+                  </div>
+                );
+              })}
+              {remoteParticipants.filter(p => !isSuperAdmin(p.identity)).length === 0 && (
+                <div style={{ textAlign: 'center', color: '#6b7280', fontSize: 12, fontStyle: 'italic', padding: 20 }}>Belum ada peserta lain.</div>
+              )}
+            </div>
+          </div>
         </div>
       )}
 
