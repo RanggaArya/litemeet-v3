@@ -19,15 +19,21 @@ export const ICONS = {
 export const BANDWIDTH_MODES = {
   saver: {
     label: 'Hemat', icon: '📶',
-    resolution: VideoPresets.h360.resolution, maxBitrate: 200_000, maxFramerate: 24,
-    screenShareBitrate: 300_000, screenShareFps: 10,
-    simulcastLayers: [VideoPresets.h90, VideoPresets.h180],
+    resolution: VideoPresets.h360.resolution, maxBitrate: 120_000, maxFramerate: 15,
+    screenShareBitrate: 150_000, screenShareFps: 8,
+    simulcastLayers: [],
   },
   hd: {
     label: 'HD', icon: '🎬',
-    resolution: VideoPresets.h720.resolution, maxBitrate: 1_500_000, maxFramerate: 30,
-    screenShareBitrate: 1_500_000, screenShareFps: 15,
+    resolution: VideoPresets.h720.resolution, maxBitrate: 800_000, maxFramerate: 24,
+    screenShareBitrate: 800_000, screenShareFps: 15,
     simulcastLayers: [VideoPresets.h180, VideoPresets.h360],
+  },
+  ultra: {
+    label: 'Ultra', icon: '🎥',
+    resolution: VideoPresets.h1080.resolution, maxBitrate: 4_000_000, maxFramerate: 60,
+    screenShareBitrate: 4_000_000, screenShareFps: 30,
+    simulcastLayers: [VideoPresets.h360, VideoPresets.h720],
   },
 };
 
@@ -37,8 +43,8 @@ export function buildRoomOptions(mode) {
     adaptiveStream: true, dynacast: true,
     stopLocalTrackOnUnpublish: false,
     reconnectPolicy: {
-      maxRetries: 10,
-      nextRetryDelayInMs: (context) => Math.min(300 * Math.pow(2, context.retryCount), 10000),
+      maxRetries: 3,
+      nextRetryDelayInMs: (context) => Math.min(500 * Math.pow(2, context.retryCount), 5000),
     },
     videoCaptureDefaults: { facingMode: 'user' },
     publishDefaults: {

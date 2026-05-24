@@ -84,7 +84,8 @@ public class CallForegroundService extends Service {
             .setContentTitle("LiteMeet — Panggilan Aktif")
             .setContentText("Room: " + roomName)
             .setSmallIcon(android.R.drawable.ic_menu_call)
-            .setOngoing(true)
+            .setOngoing(true)         // Tidak bisa digeser/dismiss
+            .setAutoCancel(false)     // Tidak hilang saat diklik
             .setCategory(NotificationCompat.CATEGORY_CALL)
             .setPriority(NotificationCompat.PRIORITY_MAX)
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
@@ -93,6 +94,9 @@ public class CallForegroundService extends Service {
             .setContentIntent(pendingOpen)
             .addAction(android.R.drawable.ic_menu_close_clear_cancel, "Akhiri", pendingStop)
             .build();
+
+        // Tambahkan flag agar benar-benar tidak bisa di-dismiss
+        notification.flags |= Notification.FLAG_NO_CLEAR | Notification.FLAG_ONGOING_EVENT;
 
         // Mulai sebagai foreground service — microphone dan camera type
         try {

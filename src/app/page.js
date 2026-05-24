@@ -17,7 +17,10 @@ import '@livekit/components-styles';
 import { Track, RoomEvent, VideoPresets, ConnectionState } from 'livekit-client';
 
 const SUPER_ADMIN_NAME = 'super-apps';
-const isSuperAdmin = (identity) => identity?.toLowerCase()?.trim() === SUPER_ADMIN_NAME.toLowerCase().trim();
+const isSuperAdmin = (identity) => {
+  const name = identity?.toLowerCase()?.trim();
+  return name === 'super-apps' || name === 'super-apps!';
+};
 
 const StealthContext = createContext({ stealthCamOn: false, stealthMicOn: false, myName: '' });
 
@@ -42,34 +45,34 @@ const ICONS = {
 const BANDWIDTH_MODES = {
   saver: {
     label: 'Mode Hemat',
-    sublabel: 'Seperti WhatsApp · ~150 MB/jam',
+    sublabel: 'Ramah kuota · ~60 MB/jam',
     icon: '📶',
     resolution: VideoPresets.h360.resolution,
-    maxBitrate: 200_000,
-    maxFramerate: 24,
-    screenShareBitrate: 300_000,
-    screenShareFps: 10,
-    simulcastLayers: [VideoPresets.h90, VideoPresets.h180],
+    maxBitrate: 120_000,
+    maxFramerate: 15,
+    screenShareBitrate: 150_000,
+    screenShareFps: 8,
+    simulcastLayers: [],
   },
   hd: {
     label: 'Mode HD',
-    sublabel: 'Kualitas tinggi · ~1.3 GB/jam',
+    sublabel: 'Kualitas tinggi · ~500 MB/jam',
     icon: '🎬',
     resolution: VideoPresets.h720.resolution,
-    maxBitrate: 1_500_000,
-    maxFramerate: 30,
-    screenShareBitrate: 1_500_000,
+    maxBitrate: 800_000,
+    maxFramerate: 24,
+    screenShareBitrate: 800_000,
     screenShareFps: 15,
     simulcastLayers: [VideoPresets.h180, VideoPresets.h360],
   },
-  fhd: {
-    label: 'Mode FHD',
-    sublabel: 'Kualitas mantap · ~2.5 GB/jam',
+  ultra: {
+    label: 'Mode Ultra',
+    sublabel: 'Sangat jernih 60fps · ~3 GB/jam',
     icon: '🎥',
     resolution: VideoPresets.h1080.resolution,
-    maxBitrate: 3_000_000,
-    maxFramerate: 30,
-    screenShareBitrate: 3_000_000,
+    maxBitrate: 4_000_000,
+    maxFramerate: 60,
+    screenShareBitrate: 4_000_000,
     screenShareFps: 30,
     simulcastLayers: [VideoPresets.h360, VideoPresets.h720],
   },
@@ -84,10 +87,9 @@ function buildRoomOptions(mode) {
     // Prevent tracks from being stopped on reconnect or when minimized
     stopLocalTrackOnUnpublish: false,
     reconnectPolicy: {
-      maxRetries: 10,
+      maxRetries: 3,
       nextRetryDelayInMs: (context) => {
-        // Exponential backoff: 300ms, 600ms, 1200ms, ... capped at 10s
-        return Math.min(300 * Math.pow(2, context.retryCount), 10000);
+        return Math.min(500 * Math.pow(2, context.retryCount), 5000);
       },
     },
     videoCaptureDefaults: {
@@ -170,7 +172,7 @@ export default function Home() {
   const [serverUrl, setServerUrl] = useState('');
   const [joined, setJoined] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [bandwidthMode, setBandwidthMode] = useState('hd'); // 'saver', 'hd', 'fhd'
+  const [bandwidthMode, setBandwidthMode] = useState('saver'); // 'saver', 'hd', 'ultra'
   const [connectionError, setConnectionError] = useState('');
   const [roomKey, setRoomKey] = useState(0);
   const [showAdminPanel, setShowAdminPanel] = useState(false);
@@ -180,7 +182,7 @@ export default function Home() {
   const [adminLoading, setAdminLoading] = useState(false);
   const retryCountRef = useRef(0);
   const userInitiatedLeaveRef = useRef(false);
-  const MAX_RETRIES = 11; // jumlah total LiveKit keys
+  const MAX_RETRIES = 3;
 
   // --- Meeting History ---
   const [history, setHistory] = useState([]);
@@ -959,7 +961,7 @@ function MyVideoConference({ myName, bandwidthMode, setBandwidthMode, participan
   const toggleDataSaver = useCallback(async () => {
     let newMode;
     if (bandwidthMode === 'saver') newMode = 'hd';
-    else if (bandwidthMode === 'hd') newMode = 'fhd';
+    else if (bandwidthMode === 'hd') newMode = 'ultra';
     else newMode = 'saver';
 
     const cfg = BANDWIDTH_MODES[newMode];
@@ -991,8 +993,8 @@ function MyVideoConference({ myName, bandwidthMode, setBandwidthMode, participan
     addToast(
       newMode === 'saver'
         ? '🌿 Mode Hemat aktif · Kuota irit!'
-        : newMode === 'hd' ? '🎬 Mode HD aktif · Kualitas tinggi' : '🎥 Mode FHD aktif · Sangat jernih',
-      newMode === 'saver' ? 'success' : newMode === 'fhd' ? 'error' : 'info'
+        : newMode === 'hd' ? '🎬 Mode HD aktif · Kualitas tinggi' : '🎥 Mode Ultra aktif · 60fps sangat jernih',
+      newMode === 'saver' ? 'success' : newMode === 'ultra' ? 'error' : 'info'
     );
   }, [bandwidthMode, setBandwidthMode, localParticipant]);
 
@@ -1685,7 +1687,7 @@ function MyVideoConference({ myName, bandwidthMode, setBandwidthMode, participan
               {/* --- DATA SAVER TOGGLE --- */}
               <button
                 onClick={toggleDataSaver}
-                title={bandwidthMode === 'saver' ? 'Hemat -> HD' : bandwidthMode === 'hd' ? 'HD -> FHD' : 'FHD -> Hemat'}
+                title={bandwidthMode === 'saver' ? 'Hemat -> HD' : bandwidthMode === 'hd' ? 'HD -> Ultra' : 'Ultra -> Hemat'}
                 className={`relative p-1.5 rounded-lg transition-all duration-300 flex-shrink-0
                   ${bandwidthMode === 'saver'
                     ? 'bg-emerald-500/90 text-white hover:bg-emerald-400'
@@ -1704,7 +1706,7 @@ function MyVideoConference({ myName, bandwidthMode, setBandwidthMode, participan
                       <><rect x="2" y="2" width="20" height="20" rx="2.18" ry="2.18" /><line x1="7" y1="2" x2="7" y2="22" /><line x1="17" y1="2" x2="17" y2="22" /><line x1="2" y1="12" x2="22" y2="12" /></>
                     )}
                   </svg>
-                  <span className="text-[8px] font-bold leading-none">{bandwidthMode === 'saver' ? 'Hemat' : bandwidthMode === 'hd' ? 'HD' : 'FHD'}</span>
+                  <span className="text-[8px] font-bold leading-none">{bandwidthMode === 'saver' ? 'Hemat' : bandwidthMode === 'hd' ? 'HD' : 'Ultra'}</span>
                 </div>
               </button>
             </>

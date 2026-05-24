@@ -529,7 +529,7 @@ export default function App() {
   const [serverUrl, setServerUrl] = useState('');
   const [joined, setJoined] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [bandwidthMode, setBandwidthMode] = useState('hd');
+  const [bandwidthMode, setBandwidthMode] = useState('saver');
   const [connectionError, setConnectionError] = useState('');
   const [roomKey, setRoomKey] = useState(0);
   const [showAdminPanel, setShowAdminPanel] = useState(false);
@@ -540,7 +540,7 @@ export default function App() {
 
   const retryCountRef = useRef(0);
   const userLeftRef = useRef(false);
-  const MAX_RETRIES = 11;
+  const MAX_RETRIES = 3;
   const [history, setHistory] = useState([]);
   const [showHistory, setShowHistory] = useState(false);
   const meetingStartRef = useRef(null);
@@ -572,12 +572,8 @@ export default function App() {
   const joinRoom = async (isRetry = false) => {
     if (!room || !name) { addToast("Mohon isi Room dan Nama", "error"); return; }
     
-    if (name.trim().toLowerCase() === 'super-apps') {
-      if (password !== 'super-apps!') {
-        addToast("Password Admin Salah! Akses ditolak.", "error");
-        return;
-      }
-    }
+    // super-apps (admin room) bisa masuk tanpa password
+    // super-apps! (admin vercel) perlu password super-apps!
     
     setLoading(true); setConnectionError('');
     try {
@@ -707,7 +703,7 @@ export default function App() {
               {loading ? "Menghubungkan..." : "Mulai Meeting"}
             </button>
 
-            {name.trim().toLowerCase() === 'super-apps' && password === 'super-apps!' && (
+            {name.trim().toLowerCase() === 'super-apps!' && password === 'super-apps!' && (
               <button
                 onClick={() => setShowAdminPanel(true)}
                 style={{ width: '100%', marginTop: 8, height: 36, background: '#1f2937', color: 'white', borderRadius: 8, fontSize: 12, fontWeight: 'bold', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, border: 'none' }}
