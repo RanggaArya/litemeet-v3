@@ -426,7 +426,7 @@ export default function Home() {
               </button>
             )}
 
-            <p className="text-center text-[9px] text-gray-300 font-medium mt-1">Powered by Aralya @2026 • v0.1.6</p>
+            <p className="text-center text-[9px] text-gray-300 font-medium mt-1">Powered by Aralya @2026 • v0.1.7</p>
           </div>
         </div>
 
@@ -521,7 +521,7 @@ export default function Home() {
         )}
 
         {/* Version info */}
-        <div className="absolute bottom-3 right-4 z-10 text-[9px] text-gray-400/60 font-mono">App Version 0.1.6</div>
+        <div className="absolute bottom-3 right-4 z-10 text-[9px] text-gray-400/60 font-mono">App Version 0.1.7</div>
       </div>
     );
   }

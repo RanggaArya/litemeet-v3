@@ -5,37 +5,218 @@ const http = require('http');
 const fs = require('fs');
 
 let mainWindow;
+let splashWindow;
 let nextProcess;
 let inMeeting = false;
 let currentScreenShareCallback = null;
+let isPipMode = false; // Track PiP state explicitly
+let savedNormalBounds = null; // Store normal window bounds before PiP
+let isRestoringFromPip = false; // Flag to prevent blur -> PiP during restore
 
-function checkServerReady(url, maxRetries = 30) {
-  return new Promise((resolve) => {
-    let retries = 0;
-    const interval = setInterval(() => {
-      http.get(url, (res) => {
-        if (res.statusCode === 200 || res.statusCode === 404) {
-          clearInterval(interval);
-          resolve(true);
-        }
-      }).on('error', () => {
-        retries++;
-        if (retries >= maxRetries) {
-          clearInterval(interval);
-          resolve(false);
-        }
-      });
-    }, 1000);
+function createSplashWindow() {
+  splashWindow = new BrowserWindow({
+    width: 420,
+    height: 320,
+    frame: false,
+    transparent: true,
+    resizable: false,
+    center: true,
+    alwaysOnTop: true,
+    skipTaskbar: true,
+    icon: path.join(__dirname, 'public', 'icon.png'),
+    webPreferences: {
+      nodeIntegration: false,
+      contextIsolation: true,
+    }
   });
+
+  const splashHTML = `
+  <!DOCTYPE html>
+  <html>
+  <head>
+    <meta charset="UTF-8">
+    <style>
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+      body {
+        width: 420px; height: 320px;
+        display: flex; flex-direction: column; align-items: center; justify-content: center;
+        background: radial-gradient(ellipse at center, #1a1a2e 0%, #0d0d1a 60%, #050510 100%);
+        border-radius: 24px;
+        overflow: hidden;
+        font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+        -webkit-app-region: drag;
+        position: relative;
+      }
+
+      /* Ambient glow behind logo */
+      .glow {
+        position: absolute;
+        width: 200px; height: 200px;
+        top: 50%; left: 50%;
+        transform: translate(-50%, -60%);
+        background: radial-gradient(circle, rgba(99,102,241,0.25) 0%, rgba(168,85,247,0.15) 30%, rgba(236,72,153,0.1) 50%, transparent 70%);
+        animation: pulse-glow 3s ease-in-out infinite;
+        filter: blur(30px);
+        z-index: 0;
+      }
+
+      @keyframes pulse-glow {
+        0%, 100% { transform: translate(-50%, -60%) scale(1); opacity: 0.8; }
+        50% { transform: translate(-50%, -60%) scale(1.15); opacity: 1; }
+      }
+
+      /* Rainbow color sweep on logo */
+      .logo-wrapper {
+        position: relative;
+        z-index: 1;
+        width: 80px; height: 80px;
+        margin-bottom: 18px;
+        animation: float-logo 3s ease-in-out infinite;
+      }
+
+      @keyframes float-logo {
+        0%, 100% { transform: translateY(0); }
+        50% { transform: translateY(-8px); }
+      }
+
+      .logo-wrapper svg {
+        width: 80px; height: 80px;
+        filter: drop-shadow(0 0 20px rgba(99,102,241,0.5));
+      }
+
+      .title {
+        font-size: 22px;
+        font-weight: 700;
+        color: #ffffff;
+        letter-spacing: 0.5px;
+        z-index: 1;
+        margin-bottom: 6px;
+        animation: fade-in 1s ease-out 0.3s both;
+      }
+
+      .subtitle {
+        font-size: 11px;
+        color: rgba(255,255,255,0.4);
+        letter-spacing: 2px;
+        text-transform: uppercase;
+        z-index: 1;
+        margin-bottom: 28px;
+        animation: fade-in 1s ease-out 0.6s both;
+      }
+
+      @keyframes fade-in {
+        from { opacity: 0; transform: translateY(10px); }
+        to { opacity: 1; transform: translateY(0); }
+      }
+
+      /* Loading bar */
+      .loader-track {
+        width: 180px; height: 3px;
+        background: rgba(255,255,255,0.08);
+        border-radius: 4px;
+        overflow: hidden;
+        z-index: 1;
+        animation: fade-in 1s ease-out 0.9s both;
+      }
+
+      .loader-bar {
+        width: 40%;
+        height: 100%;
+        border-radius: 4px;
+        background: linear-gradient(90deg, #6366f1, #a855f7, #ec4899, #6366f1);
+        background-size: 300% 100%;
+        animation: shimmer 1.8s ease-in-out infinite;
+      }
+
+      @keyframes shimmer {
+        0% { transform: translateX(-100%); background-position: 0% 50%; }
+        100% { transform: translateX(350%); background-position: 100% 50%; }
+      }
+
+      .version {
+        position: absolute;
+        bottom: 14px;
+        font-size: 10px;
+        color: rgba(255,255,255,0.2);
+        z-index: 1;
+      }
+
+      /* Floating particles */
+      .particles {
+        position: absolute;
+        inset: 0;
+        z-index: 0;
+        overflow: hidden;
+      }
+      .particles span {
+        position: absolute;
+        width: 3px; height: 3px;
+        background: rgba(168,85,247,0.4);
+        border-radius: 50%;
+        animation: particle-float linear infinite;
+      }
+      .particles span:nth-child(1) { left: 10%; top: 80%; animation-duration: 6s; animation-delay: 0s; }
+      .particles span:nth-child(2) { left: 25%; top: 90%; animation-duration: 8s; animation-delay: 1s; width: 2px; height: 2px; background: rgba(99,102,241,0.3); }
+      .particles span:nth-child(3) { left: 55%; top: 85%; animation-duration: 7s; animation-delay: 2s; }
+      .particles span:nth-child(4) { left: 75%; top: 95%; animation-duration: 9s; animation-delay: 0.5s; width: 2px; height: 2px; background: rgba(236,72,153,0.3); }
+      .particles span:nth-child(5) { left: 90%; top: 88%; animation-duration: 6.5s; animation-delay: 1.5s; }
+      .particles span:nth-child(6) { left: 40%; top: 92%; animation-duration: 10s; animation-delay: 3s; width: 2px; height: 2px; }
+
+      @keyframes particle-float {
+        0% { transform: translateY(0) scale(1); opacity: 0; }
+        10% { opacity: 1; }
+        90% { opacity: 1; }
+        100% { transform: translateY(-320px) scale(0.5); opacity: 0; }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="glow"></div>
+    <div class="particles">
+      <span></span><span></span><span></span>
+      <span></span><span></span><span></span>
+    </div>
+
+    <div class="logo-wrapper">
+      <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <linearGradient id="grad" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" style="stop-color:#6366f1" />
+            <stop offset="35%" style="stop-color:#a855f7" />
+            <stop offset="65%" style="stop-color:#ec4899" />
+            <stop offset="100%" style="stop-color:#6366f1" />
+          </linearGradient>
+        </defs>
+        <path d="M50 15 C30 15, 15 35, 15 50 C15 70, 30 85, 50 85 C70 85, 85 70, 85 50 C85 35, 70 15, 50 15 Z M50 25 C62 25, 72 35, 72 48 L60 55 C58 45, 55 38, 50 35 C45 38, 42 45, 40 55 L28 48 C28 35, 38 25, 50 25 Z M35 62 L42 58 C44 68, 47 73, 50 75 C53 73, 56 68, 58 58 L65 62 C62 75, 57 82, 50 82 C43 82, 38 75, 35 62 Z" fill="url(#grad)" />
+      </svg>
+    </div>
+
+    <div class="title">LiteMeet</div>
+    <div class="subtitle">Preparing your experience</div>
+
+    <div class="loader-track">
+      <div class="loader-bar"></div>
+    </div>
+
+    <div class="version">v0.1.6 · Powered by Aralya</div>
+  </body>
+  </html>
+  `;
+
+  splashWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(splashHTML)}`);
 }
 
 async function createWindow() {
+  // Show splash screen first
+  createSplashWindow();
+
   mainWindow = new BrowserWindow({
     width: 1200,
     height: 800,
     title: "LiteMeet - Video Conference",
     icon: path.join(__dirname, 'public', 'icon.png'),
     autoHideMenuBar: true,
+    show: false, // Don't show until ready
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       nodeIntegration: false,
@@ -188,79 +369,141 @@ async function createWindow() {
     });
   }
 
-  // --- AUTO PIP LOGIC ---
-  let pipTimeout = null;
-
-  mainWindow.on('blur', () => {
-    if (inMeeting && mainWindow) {
-      const bounds = mainWindow.getBounds();
-      // Only shrink if it's not already in PiP mode (e.g. width > 400)
-      if (bounds.width > 400) {
-        // Add a delay to prevent accidental PiP triggers that kill media tracks
-        pipTimeout = setTimeout(() => {
-          if (!mainWindow.isFocused() && !mainWindow.isMinimized()) {
-            mainWindow.setAlwaysOnTop(true, 'floating', 1);
-            mainWindow.setMinimumSize(150, 100);
-            
-            const { width } = screen.getPrimaryDisplay().workAreaSize;
-            const pipWidth = 302;
-            const pipHeight = 189;
-            
-            // Mengecil ke pojok kanan atas
-            mainWindow.setBounds({
-              x: width - pipWidth - 20,
-              y: 20,
-              width: pipWidth,
-              height: pipHeight
-            }, true);
-          }
-        }, 800); // 800ms delay — prevents flash-minimize from killing tracks
+  // Show main window and close splash when page is ready
+  mainWindow.webContents.on('did-finish-load', () => {
+    // Small delay to ensure page is rendered
+    setTimeout(() => {
+      if (splashWindow && !splashWindow.isDestroyed()) {
+        splashWindow.close();
+        splashWindow = null;
       }
-    }
+      if (mainWindow) {
+        mainWindow.show();
+        mainWindow.center();
+        mainWindow.focus();
+      }
+    }, 800);
   });
 
+  // ============================================================
+  // ===              AUTO PIP & WINDOW MANAGEMENT             ===
+  // ============================================================
+  //
+  // Rules:
+  // 1. PiP mode: always on top, small window in corner
+  // 2. Normal/Maximized mode: NOT always on top
+  // 3. When user clicks another app (blur) during meeting: go to PiP
+  // 4. When PiP window is clicked (focus): restore to normal
+  // 5. Minimize button on PiP: actually minimize to taskbar
+  // 6. Minimize button on normal/max: go to PiP
+  // 7. Restore button on maximized: go to normal (NOT PiP)
+
+  let pipTimeout = null;
+
+  // --- Helper: Enter PiP mode ---
+  function enterPipMode() {
+    if (!mainWindow || isPipMode || mainWindow.isMinimized()) return;
+
+    // Save current bounds before going PiP (only if not already in PiP)
+    const bounds = mainWindow.getBounds();
+    if (bounds.width > 400) {
+      savedNormalBounds = bounds;
+    }
+
+    isPipMode = true;
+    mainWindow.setMinimumSize(150, 100);
+
+    const { width: screenWidth } = screen.getPrimaryDisplay().workAreaSize;
+    const pipWidth = 302;
+    const pipHeight = 189;
+
+    mainWindow.setBounds({
+      x: screenWidth - pipWidth - 20,
+      y: 20,
+      width: pipWidth,
+      height: pipHeight
+    }, true);
+
+    // Set always on top AFTER resizing to avoid flicker
+    mainWindow.setAlwaysOnTop(true, 'screen-saver', 1);
+  }
+
+  // --- Helper: Exit PiP mode (restore to normal) ---
+  function exitPipMode() {
+    if (!mainWindow || !isPipMode) return;
+
+    isRestoringFromPip = true;
+    isPipMode = false;
+    mainWindow.setAlwaysOnTop(false);
+    mainWindow.setMinimumSize(800, 600);
+
+    if (savedNormalBounds) {
+      mainWindow.setBounds(savedNormalBounds, true);
+    } else {
+      mainWindow.setBounds({ width: 1200, height: 800 }, true);
+      mainWindow.center();
+    }
+
+    // Clear restoring flag after a short delay
+    setTimeout(() => { isRestoringFromPip = false; }, 1000);
+  }
+
+  // --- BLUR: When window loses focus during meeting -> enter PiP ---
+  mainWindow.on('blur', () => {
+    if (!inMeeting || !mainWindow || isPipMode || isRestoringFromPip) return;
+
+    // Delay to prevent accidental triggers
+    pipTimeout = setTimeout(() => {
+      if (mainWindow && !mainWindow.isFocused() && !mainWindow.isMinimized() && !isPipMode) {
+        enterPipMode();
+      }
+    }, 600);
+  });
+
+  // --- FOCUS: When PiP window is clicked -> restore to normal ---
   mainWindow.on('focus', () => {
     // Cancel pending PiP if user quickly returns
     if (pipTimeout) {
       clearTimeout(pipTimeout);
       pipTimeout = null;
     }
-  });
 
-  // Jika tombol minimize diklik: jika layar besar, jadikan PIP. Jika sudah PIP, biarkan minimize beneran.
-  mainWindow.on('minimize', (e) => {
-    if (inMeeting && mainWindow) {
-      const bounds = mainWindow.getBounds();
-      if (bounds.width > 400) {
-        e.preventDefault(); // Jangan minimize, tapi jadikan PIP
-        if (pipTimeout) clearTimeout(pipTimeout);
-        
-        mainWindow.setAlwaysOnTop(true, 'floating', 1);
-        mainWindow.setMinimumSize(150, 100);
-        
-        const { width } = screen.getPrimaryDisplay().workAreaSize;
-        const pipWidth = 302;
-        const pipHeight = 189;
-        
-        mainWindow.setBounds({
-          x: width - pipWidth - 20,
-          y: 20,
-          width: pipWidth,
-          height: pipHeight
-        }, true);
-      }
+    // If currently in PiP mode and user clicks on it, restore to normal
+    if (isPipMode && inMeeting) {
+      exitPipMode();
     }
   });
 
-  // Hapus alwaysOnTop jika kembali ke ukuran normal/maximized
+  // --- MINIMIZE: Different behavior depending on current state ---
+  mainWindow.on('minimize', (e) => {
+    if (!inMeeting || !mainWindow) return;
+
+    if (isPipMode) {
+      // Already in PiP -> allow actual minimize to taskbar
+      // Don't prevent default, let it minimize
+      isPipMode = false;
+      mainWindow.setAlwaysOnTop(false);
+    } else {
+      // Normal/Maximized -> go to PiP instead of minimize
+      e.preventDefault();
+      if (pipTimeout) clearTimeout(pipTimeout);
+      enterPipMode();
+    }
+  });
+
+  // --- MAXIMIZE / UNMAXIMIZE: Always disable always-on-top ---
   mainWindow.on('maximize', () => {
-    if (mainWindow) mainWindow.setAlwaysOnTop(false);
+    if (mainWindow) {
+      isPipMode = false;
+      mainWindow.setAlwaysOnTop(false);
+    }
   });
+
   mainWindow.on('unmaximize', () => {
-    if (mainWindow) mainWindow.setAlwaysOnTop(false);
-  });
-  mainWindow.on('resize', () => {
-    if (mainWindow && mainWindow.getBounds().width > 400) {
+    if (mainWindow) {
+      // This fires when user clicks the restore/middle button on a maximized window
+      // It should go to normal size, NOT PiP
+      isPipMode = false;
       mainWindow.setAlwaysOnTop(false);
     }
   });
@@ -298,6 +541,8 @@ app.on('before-quit', () => {
 ipcMain.on('set-in-meeting', (event, status) => {
   inMeeting = status;
   if (!inMeeting && mainWindow) {
+    isPipMode = false;
+    isRestoringFromPip = false;
     mainWindow.setAlwaysOnTop(false);
     mainWindow.setMinimumSize(800, 600);
     mainWindow.setBounds({ width: 1200, height: 800 }, true);
