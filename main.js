@@ -79,8 +79,9 @@ function createSplashWindow() {
         50% { transform: translateY(-8px); }
       }
 
-      .logo-wrapper svg {
+      .logo-wrapper img {
         width: 80px; height: 80px;
+        border-radius: 16px;
         filter: drop-shadow(0 0 20px rgba(99,102,241,0.5));
       }
 
@@ -178,17 +179,7 @@ function createSplashWindow() {
     </div>
 
     <div class="logo-wrapper">
-      <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
-        <defs>
-          <linearGradient id="grad" x1="0%" y1="0%" x2="100%" y2="100%">
-            <stop offset="0%" style="stop-color:#6366f1" />
-            <stop offset="35%" style="stop-color:#a855f7" />
-            <stop offset="65%" style="stop-color:#ec4899" />
-            <stop offset="100%" style="stop-color:#6366f1" />
-          </linearGradient>
-        </defs>
-        <path d="M50 15 C30 15, 15 35, 15 50 C15 70, 30 85, 50 85 C70 85, 85 70, 85 50 C85 35, 70 15, 50 15 Z M50 25 C62 25, 72 35, 72 48 L60 55 C58 45, 55 38, 50 35 C45 38, 42 45, 40 55 L28 48 C28 35, 38 25, 50 25 Z M35 62 L42 58 C44 68, 47 73, 50 75 C53 73, 56 68, 58 58 L65 62 C62 75, 57 82, 50 82 C43 82, 38 75, 35 62 Z" fill="url(#grad)" />
-      </svg>
+      <img src="data:image/png;base64,${fs.existsSync(path.join(__dirname, 'public', 'icon.png')) ? fs.readFileSync(path.join(__dirname, 'public', 'icon.png')).toString('base64') : ''}" alt="LiteMeet Logo" />
     </div>
 
     <div class="title">LiteMeet</div>
@@ -198,7 +189,7 @@ function createSplashWindow() {
       <div class="loader-bar"></div>
     </div>
 
-    <div class="version">v0.1.6 · Powered by Aralya</div>
+    <div class="version">v0.1.7 · Powered by Aralya</div>
   </body>
   </html>
   `;
@@ -399,15 +390,23 @@ async function createWindow() {
   // 7. Restore button on maximized: go to normal (NOT PiP)
 
   let pipTimeout = null;
+  let isEnteringPip = false;
 
   // --- Helper: Enter PiP mode ---
   function enterPipMode() {
     if (!mainWindow || isPipMode || mainWindow.isMinimized()) return;
 
+    isEnteringPip = true;
+
     // Save current bounds before going PiP (only if not already in PiP)
     const bounds = mainWindow.getBounds();
-    if (bounds.width > 400) {
+    if (bounds.width > 400 && !mainWindow.isMaximized()) {
       savedNormalBounds = bounds;
+    }
+
+    // Must unmaximize first before resizing, otherwise Windows locks the bounds
+    if (mainWindow.isMaximized()) {
+      mainWindow.unmaximize();
     }
 
     isPipMode = true;
@@ -426,6 +425,8 @@ async function createWindow() {
 
     // Set always on top AFTER resizing to avoid flicker
     mainWindow.setAlwaysOnTop(true, 'screen-saver', 1);
+
+    setTimeout(() => { isEnteringPip = false; }, 500);
   }
 
   // --- Helper: Exit PiP mode (restore to normal) ---
@@ -500,7 +501,7 @@ async function createWindow() {
   });
 
   mainWindow.on('unmaximize', () => {
-    if (mainWindow) {
+    if (mainWindow && !isEnteringPip) {
       // This fires when user clicks the restore/middle button on a maximized window
       // It should go to normal size, NOT PiP
       isPipMode = false;
