@@ -766,7 +766,7 @@ export default function App() {
               </button>
             )}
 
-            <p style={{ textAlign: 'center', fontSize: 9, color: '#d1d5db', fontWeight: 500 }}>Powered by Aralya @2026 • v0.1.7</p>
+            <p style={{ textAlign: 'center', fontSize: 9, color: '#d1d5db', fontWeight: 500 }}>Powered by Aralya @2026 • v0.1.8</p>
           </div>
         </div>
 
@@ -781,34 +781,39 @@ export default function App() {
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="2.5" style={{ transform: showHistory ? 'rotate(180deg)' : '', transition: 'transform 0.2s' }}><polyline points="6 9 12 15 18 9" /></svg>
             </button>
             {showHistory && (
-              <div className="history-list animate-slide-down">
-                <div className="history-scroll">
+              <div className="history-list animate-slide-down" style={{ display: 'flex', flexDirection: 'column', maxHeight: '50vh' }}>
+                <div className="history-scroll" style={{ overflowY: 'auto', flex: 1 }}>
                   {history.map(h => (
-                    <button key={h.id} className="history-item" onClick={() => { setRoom(h.room); setName(h.name); setShowHistory(false); }}>
-                      <div className="history-icon">
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#6366f1" strokeWidth="2"><path d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>
-                      </div>
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
-                          <span style={{ fontSize: 11, fontWeight: 700, color: '#1f2937', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{h.room}</span>
-                          <span style={{ fontSize: 9, color: '#9ca3af', flexShrink: 0 }}>{formatDate(h.startTime)}</span>
+                    <div key={h.id} style={{ position: 'relative' }}>
+                      <button className="history-item" style={{ width: '100%', paddingRight: 40 }} onClick={() => { setRoom(h.room); setName(h.name); setShowHistory(false); }}>
+                        <div className="history-icon">
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#6366f1" strokeWidth="2"><path d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>
                         </div>
-                        <div style={{ fontSize: 9, color: '#9ca3af', marginTop: 2 }}>
-                          ⏱ {formatDuration(h.duration)} • 👤 {h.participants?.length > 0 ? h.participants[0] : 'Hanya Anda'}
-                        </div>
-                        {h.participants?.length > 1 && (
-                          <div style={{ display: 'flex', gap: 4, marginTop: 4, flexWrap: 'wrap' }}>
-                            {h.participants.slice(1, 4).map((p, i) => (
-                              <span key={i} style={{ fontSize: 8, background: '#f3f4f6', color: '#6b7280', padding: '2px 6px', borderRadius: 999 }}>{p}</span>
-                            ))}
+                        <div style={{ flex: 1, minWidth: 0, textAlign: 'left' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
+                            <span style={{ fontSize: 11, fontWeight: 700, color: '#1f2937', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{h.room}</span>
+                            <span style={{ fontSize: 9, color: '#9ca3af', flexShrink: 0 }}>{formatDate(h.startTime)}</span>
                           </div>
-                        )}
-                      </div>
-                    </button>
+                          <div style={{ fontSize: 9, color: '#9ca3af', marginTop: 2 }}>
+                            ⏱ {formatDuration(h.duration)} • 👤 {h.participants?.length > 0 ? h.participants[0] : 'Hanya Anda'}
+                          </div>
+                          {h.participants?.length > 1 && (
+                            <div style={{ display: 'flex', gap: 4, marginTop: 4, flexWrap: 'wrap' }}>
+                              {h.participants.slice(1, 4).map((p, i) => (
+                                <span key={i} style={{ fontSize: 8, background: '#f3f4f6', color: '#6b7280', padding: '2px 6px', borderRadius: 999 }}>{p}</span>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      </button>
+                      <button onClick={(e) => removeHistoryEntry(e, h.id)} style={{ position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)', padding: 8, background: 'none', border: 'none', color: '#d1d5db', cursor: 'pointer' }} title="Hapus">
+                        <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                      </button>
+                    </div>
                   ))}
                 </div>
-                <div style={{ padding: '8px 12px', borderTop: '1px solid #f3f4f6', background: 'rgba(249,250,251,0.5)' }}>
-                  <button onClick={() => { saveHistory([]); setHistory([]); }} style={{ fontSize: 9, color: '#f87171', fontWeight: 500, background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit' }}>🗑️ Hapus Semua Riwayat</button>
+                <div style={{ padding: '8px 12px', borderTop: '1px solid #f3f4f6', background: 'rgba(249,250,251,0.5)', flexShrink: 0 }}>
+                  <button onClick={() => { saveHistory([]); setHistory([]); setShowHistory(false); }} style={{ fontSize: 9, color: '#f87171', fontWeight: 500, background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit' }}>🗑️ Hapus Semua Riwayat</button>
                 </div>
               </div>
             )}

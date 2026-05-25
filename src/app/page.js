@@ -146,6 +146,13 @@ function saveLastUser(room, name) {
   localStorage.setItem(LAST_USER_KEY, JSON.stringify({ room, name }));
 }
 
+function removeHistoryEntryLocal(id) {
+  const history = loadHistory();
+  const newHistory = history.filter(h => h.id !== id);
+  saveHistory(newHistory);
+  return newHistory;
+}
+
 function formatDuration(seconds) {
   const h = Math.floor(seconds / 3600);
   const m = Math.floor((seconds % 3600) / 60);
@@ -200,6 +207,13 @@ export default function Home() {
     if (last.name) setName(last.name);
     if (last.room) setRoom(last.room);
   }, []);
+
+  const removeHistoryEntry = (e, id) => {
+    e.stopPropagation();
+    const newHistory = removeHistoryEntryLocal(id);
+    setHistory(newHistory);
+    if (newHistory.length === 0) setShowHistory(false);
+  };
 
   const [currentTime, setCurrentTime] = useState('');
 
@@ -426,16 +440,16 @@ export default function Home() {
               </button>
             )}
 
-            <p className="text-center text-[9px] text-gray-300 font-medium mt-1">Powered by Aralya @2026 • v0.1.7</p>
+            <p className="text-center text-[9px] text-gray-300 font-medium mt-1">Powered by Aralya @2026 • v0.1.8</p>
           </div>
         </div>
 
         {/* === MEETING HISTORY PANEL (right side, top-aligned) === */}
         {history.length > 0 && (
-          <div className="absolute top-0 left-[calc(100%+1rem)] w-[300px] z-10" style={{ maxHeight: '100%' }}>
+          <div className="absolute top-0 left-[calc(100%+1rem)] w-[300px] z-10 flex flex-col max-h-[85vh]">
             <button
               onClick={() => setShowHistory(!showHistory)}
-              className="w-full flex items-center justify-between px-4 py-2.5 bg-white/80 backdrop-blur-xl rounded-xl border border-gray-200/60 shadow-sm hover:shadow-md transition-all text-left group"
+              className="w-full flex items-center justify-between px-4 py-2.5 bg-white/80 backdrop-blur-xl rounded-xl border border-gray-200/60 shadow-sm hover:shadow-md transition-all text-left group flex-shrink-0"
             >
               <div className="flex items-center gap-2">
                 <span className="text-sm">📋</span>
@@ -446,40 +460,44 @@ export default function Home() {
             </button>
 
             {showHistory && (
-              <div className="mt-1.5 bg-white/90 backdrop-blur-xl rounded-xl border border-gray-200/60 shadow-lg overflow-hidden" style={{ maxHeight: 'calc(100% - 52px)' }}>
-                <div className="overflow-y-auto divide-y divide-gray-100" style={{ maxHeight: 'calc(100% - 36px)' }}>
+              <div className="mt-1.5 bg-white/90 backdrop-blur-xl rounded-xl border border-gray-200/60 shadow-lg overflow-hidden flex flex-col flex-1 min-h-0">
+                <div className="overflow-y-auto divide-y divide-gray-100 flex-1">
                   {history.map((h) => (
-                    <button key={h.id} onClick={() => { setRoom(h.room); setName(h.name); setShowHistory(false); }} className="w-full px-3.5 py-2.5 flex items-start gap-3 hover:bg-indigo-50/60 transition-colors text-left group">
-                      <div className="w-8 h-8 rounded-full bg-gradient-to-br from-indigo-100 to-purple-100 flex items-center justify-center flex-shrink-0 mt-0.5">
-                        <svg className="w-3.5 h-3.5 text-indigo-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center justify-between gap-2">
-                          <span className="text-[11px] font-bold text-gray-800 truncate">{h.room}</span>
-                          <span className="text-[9px] text-gray-400 flex-shrink-0">{formatDate(h.startTime)}</span>
+                    <div key={h.id} className="relative group/item">
+                      <button onClick={() => { setRoom(h.room); setName(h.name); setShowHistory(false); }} className="w-full px-3.5 py-2.5 flex items-start gap-3 hover:bg-indigo-50/60 transition-colors text-left group pr-8">
+                        <div className="w-8 h-8 rounded-full bg-gradient-to-br from-indigo-100 to-purple-100 flex items-center justify-center flex-shrink-0 mt-0.5">
+                          <svg className="w-3.5 h-3.5 text-indigo-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>
                         </div>
-                        <div className="flex items-center gap-1.5 mt-0.5">
-                          <span className="text-[9px] text-gray-400">⏱ {formatDuration(h.duration)}</span>
-                          <span className="text-[9px] text-gray-300">•</span>
-                          <span className="text-[9px] text-gray-400">👤 {h.participants.length > 0 ? h.participants[0] : 'Hanya Anda'}</span>
-                        </div>
-                        {h.participants && h.participants.length > 1 && (
-                          <div className="flex items-center gap-1 mt-1 flex-wrap">
-                            {h.participants.slice(1, 4).map((p, i) => (
-                              <span key={i} className="text-[8px] bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded-full">{p}</span>
-                            ))}
-                            {h.participants.length > 4 && (
-                              <span className="text-[8px] text-gray-400">+{h.participants.length - 4} lainnya</span>
-                            )}
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="text-[11px] font-bold text-gray-800 truncate">{h.room}</span>
+                            <span className="text-[9px] text-gray-400 flex-shrink-0">{formatDate(h.startTime)}</span>
                           </div>
-                        )}
-                      </div>
-                      <svg className="w-3.5 h-3.5 text-gray-300 group-hover:text-indigo-500 transition-colors flex-shrink-0 mt-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><polyline points="9 18 15 12 9 6" strokeLinecap="round" strokeLinejoin="round"/></svg>
-                    </button>
+                          <div className="flex items-center gap-1.5 mt-0.5">
+                            <span className="text-[9px] text-gray-400">⏱ {formatDuration(h.duration)}</span>
+                            <span className="text-[9px] text-gray-300">•</span>
+                            <span className="text-[9px] text-gray-400">👤 {h.participants.length > 0 ? h.participants[0] : 'Hanya Anda'}</span>
+                          </div>
+                          {h.participants && h.participants.length > 1 && (
+                            <div className="flex items-center gap-1 mt-1 flex-wrap">
+                              {h.participants.slice(1, 4).map((p, i) => (
+                                <span key={i} className="text-[8px] bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded-full">{p}</span>
+                              ))}
+                              {h.participants.length > 4 && (
+                                <span className="text-[8px] text-gray-400">+{h.participants.length - 4} lainnya</span>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      </button>
+                      <button onClick={(e) => removeHistoryEntry(e, h.id)} className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 text-gray-300 hover:text-red-500 hover:bg-red-50 rounded-md opacity-0 group-hover/item:opacity-100 transition-all" title="Hapus riwayat ini">
+                        <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                      </button>
+                    </div>
                   ))}
                 </div>
-                <div className="px-3 py-2 border-t border-gray-100 bg-gray-50/50">
-                  <button onClick={() => { saveHistory([]); setHistory([]); }} className="text-[9px] text-red-400 hover:text-red-600 font-medium transition-colors">
+                <div className="px-3 py-2 border-t border-gray-100 bg-gray-50/50 flex-shrink-0">
+                  <button onClick={() => { saveHistory([]); setHistory([]); setShowHistory(false); }} className="text-[9px] text-red-400 hover:text-red-600 font-medium transition-colors">
                     🗑️ Hapus Semua Riwayat
                   </button>
                 </div>
@@ -521,7 +539,7 @@ export default function Home() {
         )}
 
         {/* Version info */}
-        <div className="absolute bottom-3 right-4 z-10 text-[9px] text-gray-400/60 font-mono">App Version 0.1.7</div>
+        <div className="absolute bottom-3 right-4 z-10 text-[9px] text-gray-400/60 font-mono">App Version 0.1.8</div>
       </div>
     );
   }
