@@ -183,6 +183,8 @@ export default function Home() {
   const [authUser, setAuthUser] = useState(null); // Firebase user or null
   const [authEmail, setAuthEmail] = useState('');
   const [authLoading, setAuthLoading] = useState(true);
+  const [initialStatus, setInitialStatus] = useState('');
+  const [initialRole, setInitialRole] = useState('');
   const [authScreen, setAuthScreen] = useState(true); // show auth screen first
 
   // --- CORE STATE ---
@@ -358,6 +360,8 @@ export default function Home() {
       if (data.token && data.serverUrl) {
         setToken(data.token);
         setServerUrl(data.serverUrl);
+        setInitialStatus(data.status || '');
+        setInitialRole(data.role || '');
         setJoined(true);
         retryCountRef.current = 0;
         userInitiatedLeaveRef.current = false;
@@ -741,7 +745,7 @@ export default function Home() {
       onDisconnected={handleDisconnected}
       options={roomOptions}
     >
-      <MyVideoConference myName={name} myPhotoURL={photoURL} bandwidthMode={bandwidthMode} setBandwidthMode={setBandwidthMode} participantsRef={participantsRef} saveMeetingToHistory={saveMeetingToHistory} onManualLeave={() => { userInitiatedLeaveRef.current = true; }} roomLink={roomLink} />
+      <MyVideoConference myName={name} myPhotoURL={photoURL} bandwidthMode={bandwidthMode} setBandwidthMode={setBandwidthMode} participantsRef={participantsRef} saveMeetingToHistory={saveMeetingToHistory} onManualLeave={() => { userInitiatedLeaveRef.current = true; }} roomLink={roomLink} initialStatus={initialStatus} initialRole={initialRole} />
       <RoomAudioRenderer />
     </LiveKitRoom>
   );
@@ -1008,14 +1012,32 @@ function MyParticipantTile({ trackRef, ...props }) {
   const photoToShow = (isLocal && stealthCamOn) ? myPhotoURL : participantPhoto;
 
   return (
-    <div className="relative w-full h-full group" {...props}>
+    <div className={`relative w-full h-full group tile-${participant?.identity}`} {...props}>
       <LiveKitParticipantTile trackRef={actualTrackRef} />
 
-      {/* Show Avatar when camera is muted (for all participants) */}
+      {/* Show Avatar when camera is muted (for all participants) via CSS to not cover default name/mic overlays */}
       {isCameraMuted && photoToShow && !(isLocal && stealthCamOn) && (
-        <div className="absolute inset-0 z-[5] bg-gray-800/90 flex flex-col items-center justify-center pointer-events-none rounded-[inherit] overflow-hidden">
-          <img src={photoToShow} alt="" className="w-24 h-24 sm:w-32 sm:h-32 rounded-full object-cover shadow-2xl border-4 border-gray-700/50" referrerPolicy="no-referrer" />
-        </div>
+        <style dangerouslySetInnerHTML={{__html: `
+          .tile-${participant?.identity} .lk-participant-placeholder {
+            background-image: url('${photoToShow}') !important;
+            background-size: cover !important;
+            background-position: center !important;
+            border-radius: 50% !important;
+            width: 120px !important;
+            height: 120px !important;
+            margin: auto !important;
+            position: absolute !important;
+            top: 50% !important;
+            left: 50% !important;
+            transform: translate(-50%, -50%) !important;
+            border: 4px solid rgba(55, 65, 81, 0.5) !important;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25) !important;
+            background-color: transparent !important;
+          }
+          .tile-${participant?.identity} .lk-participant-placeholder svg {
+            display: none !important;
+          }
+        `}} />
       )}
 
       {/* For stealth mode specifically (local only) */}
@@ -1050,7 +1072,7 @@ function MyParticipantTile({ trackRef, ...props }) {
     </div>
   );
 }
-function MyVideoConference({ myName, myPhotoURL, bandwidthMode, setBandwidthMode, participantsRef, saveMeetingToHistory, onManualLeave, roomLink }) {
+function MyVideoConference({ myName, myPhotoURL, bandwidthMode, setBandwidthMode, participantsRef, saveMeetingToHistory, onManualLeave, roomLink, initialStatus, initialRole }) {
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
   const [toasts, setToasts] = useState([]);
@@ -1154,8 +1176,8 @@ function MyVideoConference({ myName, myPhotoURL, bandwidthMode, setBandwidthMode
     catch(e) { return {}; }
   }, [localParticipant?.metadata]);
 
-  const isHost = localMeta.role === 'host';
-  const isWaiting = localMeta.status === 'waiting';
+  const isHost = localMeta.role === 'host' || initialRole === 'host';
+  const isWaiting = localMeta.status ? localMeta.status === 'waiting' : initialStatus === 'waiting';
 
   const [isWaitingRoomEnabled, setIsWaitingRoomEnabled] = useState(() => {
     try { return JSON.parse(room?.metadata || '{}').waitingRoom === true; } catch { return false; }

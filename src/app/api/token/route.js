@@ -97,6 +97,8 @@ export async function POST(req) {
             return NextResponse.json({
                 token,
                 serverUrl: url,
+                status: userStatus,
+                role: role
             });
         } catch (err) {
             console.error(`[Token API] ❌ Error generating token:`, err);
