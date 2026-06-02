@@ -12,6 +12,8 @@ import {
   useRoomContext,
   useChat,
   useConnectionState,
+  useTrackContext,
+  useIsMuted,
 } from '@livekit/components-react';
 import '@livekit/components-styles';
 import { Track, RoomEvent, VideoPresets, ConnectionState } from 'livekit-client';
@@ -987,7 +989,6 @@ const ParticleCanvas = () => {
 };
 
 function MyParticipantTile({ trackRef, ...props }) {
-  const { useTrackContext, useIsMuted, Track } = require('@livekit/components-react');
   const contextTrackRef = useTrackContext ? useTrackContext() : null;
   const actualTrackRef = trackRef || contextTrackRef;
   const participant = actualTrackRef?.participant;
