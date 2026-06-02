@@ -12,7 +12,7 @@ import {
   useRoomContext,
   useChat,
   useConnectionState,
-  useTrackRefContext,
+  useMaybeTrackRefContext,
   useIsMuted,
 } from '@livekit/components-react';
 import '@livekit/components-styles';
@@ -989,7 +989,7 @@ const ParticleCanvas = () => {
 };
 
 function MyParticipantTile({ trackRef, ...props }) {
-  const contextTrackRef = typeof useTrackRefContext === 'function' ? useTrackRefContext() : null;
+  const contextTrackRef = useMaybeTrackRefContext();
   const actualTrackRef = trackRef || contextTrackRef;
   const participant = actualTrackRef?.participant;
   const isLocal = participant?.isLocal;
