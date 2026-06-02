@@ -3,11 +3,13 @@ import { NextResponse } from 'next/server';
 
 export async function POST(req) {
     try {
-        const { room, username, photoURL, isCreator, waitingRoom } = await req.json();
+        const { room, username, photoURL, email, isCreator } = await req.json();
 
         if (!room || !username) {
             return NextResponse.json({ error: 'Missing room or username' }, { status: 400 });
         }
+
+        const hostKey = email || username; // Use email if available, otherwise username
 
         const apiKey = process.env.LIVEKIT_API_KEY;
         const apiSecret = process.env.LIVEKIT_API_SECRET;
@@ -37,7 +39,7 @@ export async function POST(req) {
                 } catch(e) {}
 
                 // Check if returning user is the host
-                if (parsedMeta.hostIdentity === username) {
+                if (parsedMeta.hostIdentity === hostKey) {
                     role = 'host';
                 }
             } else {
@@ -45,7 +47,7 @@ export async function POST(req) {
                 await svc.createRoom({
                     name: room,
                     emptyTimeout: 300,
-                    metadata: JSON.stringify({ hostIdentity: username, waitingRoom: false })
+                    metadata: JSON.stringify({ hostIdentity: hostKey, waitingRoom: false })
                 });
                 role = 'host';
             }

@@ -179,6 +179,7 @@ function formatDate(ts) {
 export default function Home() {
   // --- AUTH STATE ---
   const [authUser, setAuthUser] = useState(null); // Firebase user or null
+  const [authEmail, setAuthEmail] = useState('');
   const [authLoading, setAuthLoading] = useState(true);
   const [authScreen, setAuthScreen] = useState(true); // show auth screen first
 
@@ -219,6 +220,7 @@ export default function Home() {
         const u = JSON.parse(cached);
         setName(u.name);
         setPhotoURL(u.photoURL);
+        if (u.email) setAuthEmail(u.email);
         setAuthScreen(false); // bypass immediately
       }
     } catch {}
@@ -228,8 +230,9 @@ export default function Home() {
         setAuthUser(user);
         setName(user.displayName || '');
         setPhotoURL(user.photoURL || '');
+        setAuthEmail(user.email || '');
         setAuthScreen(false);
-        localStorage.setItem('litemeet_google_auth', JSON.stringify({ name: user.displayName || '', photoURL: user.photoURL || '' }));
+        localStorage.setItem('litemeet_google_auth', JSON.stringify({ name: user.displayName || '', photoURL: user.photoURL || '', email: user.email || '' }));
       }
       setAuthLoading(false);
     });
@@ -242,7 +245,8 @@ export default function Home() {
       setAuthUser(result.user);
       setName(result.user.displayName || '');
       setPhotoURL(result.user.photoURL || '');
-      localStorage.setItem('litemeet_google_auth', JSON.stringify({ name: result.user.displayName || '', photoURL: result.user.photoURL || '' }));
+      setAuthEmail(result.user.email || '');
+      localStorage.setItem('litemeet_google_auth', JSON.stringify({ name: result.user.displayName || '', photoURL: result.user.photoURL || '', email: result.user.email || '' }));
       setAuthScreen(false);
     } catch (err) {
       console.error('Google Sign-In failed:', err);
@@ -343,6 +347,7 @@ export default function Home() {
           room: actualRoomName,
           username: name,
           photoURL: photoURL || '',
+          email: authEmail || '',
           isCreator: true, // Used to claim host role if room doesn't exist
         }),
       });
@@ -982,7 +987,7 @@ const ParticleCanvas = () => {
 };
 
 function MyParticipantTile({ trackRef, ...props }) {
-  const { useTrackContext } = require('@livekit/components-react');
+  const { useTrackContext, useIsMuted, Track } = require('@livekit/components-react');
   const contextTrackRef = useTrackContext ? useTrackContext() : null;
   const actualTrackRef = trackRef || contextTrackRef;
   const participant = actualTrackRef?.participant;
@@ -998,46 +1003,52 @@ function MyParticipantTile({ trackRef, ...props }) {
     } catch { return ''; }
   }, [participant?.metadata]);
 
-  // For stealth mode: show photo if available, otherwise show avatar icon
-  if (isLocal && (stealthCamOn || stealthMicOn)) {
-    const photoToShow = myPhotoURL || participantPhoto;
-    return (
-      <div className="relative w-full h-full" {...props}>
-         {stealthCamOn && (
-           <div className="absolute inset-0 bg-[#1f2937] flex items-center justify-center z-10">
-             {photoToShow ? (
-               <div className="relative">
-                 <div className="absolute -inset-4 bg-gradient-to-br from-indigo-500/20 via-purple-500/20 to-pink-500/20 rounded-full blur-xl" />
-                 <img src={photoToShow} alt="" className="w-24 h-24 sm:w-32 sm:h-32 rounded-full object-cover border-2 border-white/20 shadow-2xl relative z-10" referrerPolicy="no-referrer" />
-                 <div className="absolute -bottom-2 left-1/2 -translate-x-1/2 bg-black/60 backdrop-blur-md px-3 py-0.5 rounded-full text-white text-xs font-medium z-20">{myName}</div>
-               </div>
-             ) : (
-               <div className="w-24 h-24 sm:w-32 sm:h-32 bg-gray-600/50 rounded-full flex items-center justify-center overflow-hidden">
-                 <svg className="w-20 h-20 sm:w-28 sm:h-28 text-gray-400 mt-4 sm:mt-6" viewBox="0 0 24 24" fill="currentColor">
-                   <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/>
-                 </svg>
-               </div>
-             )}
-           </div>
-         )}
+  const isCameraMuted = useIsMuted(Track.Source.Camera, { participant });
+  const photoToShow = (isLocal && stealthCamOn) ? myPhotoURL : participantPhoto;
+
+  return (
+    <div className="relative w-full h-full group" {...props}>
+      <LiveKitParticipantTile trackRef={actualTrackRef} />
+
+      {/* Show Avatar when camera is muted (for all participants) */}
+      {isCameraMuted && photoToShow && !(isLocal && stealthCamOn) && (
+        <div className="absolute inset-0 z-[5] bg-gray-800/90 flex flex-col items-center justify-center pointer-events-none rounded-[inherit] overflow-hidden">
+          <img src={photoToShow} alt="" className="w-24 h-24 sm:w-32 sm:h-32 rounded-full object-cover shadow-2xl border-4 border-gray-700/50" referrerPolicy="no-referrer" />
+        </div>
+      )}
+
+      {/* For stealth mode specifically (local only) */}
+      {isLocal && stealthCamOn && (
+         <div className="absolute inset-0 bg-[#1f2937] flex items-center justify-center z-10 rounded-[inherit]">
+           {photoToShow ? (
+             <div className="relative">
+               <div className="absolute -inset-4 bg-gradient-to-br from-indigo-500/20 via-purple-500/20 to-pink-500/20 rounded-full blur-xl" />
+               <img src={photoToShow} alt="" className="w-24 h-24 sm:w-32 sm:h-32 rounded-full object-cover border-2 border-white/20 shadow-2xl relative z-10" referrerPolicy="no-referrer" />
+               <div className="absolute -bottom-2 left-1/2 -translate-x-1/2 bg-black/60 backdrop-blur-md px-3 py-0.5 rounded-full text-white text-xs font-medium z-20">{myName}</div>
+             </div>
+           ) : (
+             <div className="w-24 h-24 sm:w-32 sm:h-32 bg-gray-600/50 rounded-full flex items-center justify-center overflow-hidden">
+               <svg className="w-20 h-20 sm:w-28 sm:h-28 text-gray-400 mt-4 sm:mt-6" viewBox="0 0 24 24" fill="currentColor">
+                 <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/>
+               </svg>
+             </div>
+           )}
+         </div>
+      )}
          
-         <LiveKitParticipantTile trackRef={actualTrackRef} />
-
-         {stealthMicOn && (
-           <div className="absolute bottom-1 left-1 z-20 pointer-events-none flex items-center">
-              <div className="bg-black/60 backdrop-blur-md px-1.5 py-1 rounded text-white flex items-center gap-1.5 shadow-sm">
-                <svg className="w-3.5 h-3.5" viewBox="0 0 16 16" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
-                  <path fillRule="evenodd" clipRule="evenodd" d="M12.143 9.733V6.305H11v3.428c0 .49-.107.954-.299 1.375l.963.963a4.135 4.135 0 0 0 .479-2.338ZM12.75 12.292 13.568 12.764 14.414 11.3 1.586 3.892.739 5.358l3.158 1.824c-.033.175-.05.358-.05.546v2.005c0 1.725 1.314 3.143 3 3.328v1.796H8.848v-1.809a4.148 4.148 0 0 0 1.522-.513l1.389.802c-.588.447-1.315.739-2.111.831V16H6.048v-1.832C4.054 13.916 2.514 12.215 2.514 10.143V7.729c0-.302.037-.595.106-.876l-.868-.502V5.486H3.648v.507L5.458 7.038c-.007.05-.01.1-.01.15v2.545c0 1.293 1.048 2.341 2.34 2.341.83 0 1.56-.432 1.951-1.088l3.01 1.307ZM6.59 5.617V5.167c0-.562.456-1.017 1.018-1.017h.455c.562 0 1.018.455 1.018 1.017v2.94l1.143.66V5.167C10.223 3.973 9.256 3.007 8.063 3.007H7.608C6.733 3.007 5.98 3.526 5.656 4.288L6.59 4.828v.789Z"/>
-                </svg>
-                <span className="text-[11px] font-medium leading-none pb-[1px]">{myName}</span>
-              </div>
-           </div>
-         )}
-      </div>
-    );
-  }
-
-  return <LiveKitParticipantTile trackRef={actualTrackRef} {...props} />;
+      {isLocal && stealthMicOn && (
+         <div className="absolute bottom-1 left-1 z-20 pointer-events-none flex items-center">
+            <div className="bg-black/60 backdrop-blur-md px-1.5 py-1 rounded text-white flex items-center gap-1.5 shadow-sm">
+              <svg className="w-3.5 h-3.5" viewBox="0 0 16 16" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+                <path fillRule="evenodd" clipRule="evenodd" d="M12.143 9.733V6.305H11v3.428c0 .49-.107.954-.299 1.375l.963.963a4.135 4.135 0 0 0 .479-2.338ZM12.75 12.292 13.568 12.764 14.414 11.3 1.586 3.892.739 5.358l3.158 1.824c-.033.175-.05.358-.05.546v2.005c0 1.725 1.314 3.143 3 3.328v1.796H8.848v-1.809a4.148 4.148 0 0 0 1.522-.513l1.389.802c-.588.447-1.315.739-2.111.831V16H6.048v-1.832C4.054 13.916 2.514 12.215 2.514 10.143V7.729c0-.302.037-.595.106-.876l-.868-.502V5.486H3.648v.507L5.458 7.038c-.007.05-.01.1-.01.15v2.545c0 1.293 1.048 2.341 2.34 2.341.83 0 1.56-.432 1.951-1.088l3.01 1.307ZM6.59 5.617V5.167c0-.562.456-1.017 1.018-1.017h.455c.562 0 1.018.455 1.018 1.017v2.94l1.143.66V5.167C10.223 3.973 9.256 3.007 8.063 3.007H7.608C6.733 3.007 5.98 3.526 5.656 4.288L6.59 4.828v.789Z"/>
+              </svg>
+              <span className="text-[11px] font-medium leading-none pb-[1px]">{myName}</span>
+            </div>
+         </div>
+      )}
+    </div>
+  );
+}
 }
 
 function MyVideoConference({ myName, myPhotoURL, bandwidthMode, setBandwidthMode, participantsRef, saveMeetingToHistory, onManualLeave, roomLink }) {
