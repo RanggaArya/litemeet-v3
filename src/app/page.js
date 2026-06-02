@@ -204,7 +204,6 @@ export default function Home() {
   const MAX_RETRIES = 3;
 
   // --- NEW FEATURE STATES ---
-  const [enableWaitingRoom, setEnableWaitingRoom] = useState(false);
   const [enableHostControls, setEnableHostControls] = useState(true);
   const [enableE2EE, setEnableE2EE] = useState(false);
   const [e2eePassphrase, setE2eePassphrase] = useState('');
@@ -345,7 +344,6 @@ export default function Home() {
           username: name,
           photoURL: photoURL || '',
           isCreator: true, // Used to claim host role if room doesn't exist
-          waitingRoom: enableWaitingRoom,
         }),
       });
       const data = await resp.json();
@@ -597,9 +595,7 @@ export default function Home() {
             {/* === FEATURE TOGGLES === */}
             <div className="flex flex-wrap gap-1.5">
               {/* Waiting Room Toggle */}
-              <button onClick={() => setEnableWaitingRoom(!enableWaitingRoom)} className={`flex items-center gap-1 px-2 py-1 rounded-md text-[9px] font-bold border transition-all ${enableWaitingRoom ? 'bg-blue-50 border-blue-200 text-blue-600' : 'bg-white border-gray-200 text-gray-400'}`}>
-                🚪 Ruang Tunggu {enableWaitingRoom ? 'ON' : 'OFF'}
-              </button>
+
             </div>
 
             {connectionError && (
@@ -1150,6 +1146,34 @@ function MyVideoConference({ myName, myPhotoURL, bandwidthMode, setBandwidthMode
 
   const isHost = localMeta.role === 'host';
   const isWaiting = localMeta.status === 'waiting';
+
+  const [isWaitingRoomEnabled, setIsWaitingRoomEnabled] = useState(() => {
+    try { return JSON.parse(room?.metadata || '{}').waitingRoom === true; } catch { return false; }
+  });
+
+  useEffect(() => {
+    if (!room) return;
+    const handleRoomMeta = (metadata) => {
+      try { setIsWaitingRoomEnabled(JSON.parse(metadata || '{}').waitingRoom === true); } catch {}
+    };
+    room.on('roomMetadataChanged', handleRoomMeta);
+    // Init in case it changed before listener attached
+    handleRoomMeta(room.metadata);
+    return () => room.off('roomMetadataChanged', handleRoomMeta);
+  }, [room]);
+
+  const toggleWaitingRoom = async () => {
+    try {
+      const currentMeta = JSON.parse(room.metadata || '{}');
+      const newMeta = JSON.stringify({ ...currentMeta, waitingRoom: !isWaitingRoomEnabled });
+      const baseUrl = isDesktopApp ? 'https://litemeet-v3.vercel.app' : '';
+      await fetch(baseUrl + '/api/room-action', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'update-room-meta', room: room.name, metadata: newMeta })
+      });
+    } catch(e) { console.error('Failed to toggle waiting room', e); }
+  };
 
   const isAdmin = isSuperAdmin(myName);
   const remoteParticipants = remoteParticipantsRaw.filter(p => !isSuperAdmin(p.identity));
@@ -2136,6 +2160,17 @@ function MyVideoConference({ myName, myPhotoURL, bandwidthMode, setBandwidthMode
                 </div>
               </div>
               <div className="p-3 max-h-60 overflow-y-auto custom-scrollbar flex flex-col gap-2">
+                {/* --- Waiting Room Toggle --- */}
+                <div className="flex items-center justify-between bg-amber-500/10 border border-amber-500/20 p-2 rounded-lg mb-1">
+                  <span className="text-[10px] font-bold text-amber-500">🚪 Ruang Tunggu</span>
+                  <button 
+                    onClick={toggleWaitingRoom}
+                    className={`relative inline-flex h-4 w-8 items-center rounded-full transition-colors ${isWaitingRoomEnabled ? 'bg-amber-500' : 'bg-gray-600'}`}
+                  >
+                    <span className={`inline-block h-3 w-3 transform rounded-full bg-white transition-transform ${isWaitingRoomEnabled ? 'translate-x-4' : 'translate-x-1'}`} />
+                  </button>
+                </div>
+
                 {(() => {
                   const waiting = remoteParticipantsRaw.filter(p => {
                     if (isSuperAdmin(p.identity)) return false;

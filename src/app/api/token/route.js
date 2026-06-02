@@ -22,29 +22,35 @@ export async function POST(req) {
         
         let role = 'participant';
         let roomExists = false;
-        let isWaitingRoomEnabled = waitingRoom === true;
+        let isWaitingRoomEnabled = false;
 
         try {
             const rooms = await svc.listRooms();
             const existingRoom = rooms.find(r => r.name === room);
+            
             if (existingRoom) {
                 roomExists = true;
-                // Read waiting room status from existing room metadata
+                let parsedMeta = {};
                 try {
-                    const parsedMeta = JSON.parse(existingRoom.metadata || '{}');
+                    parsedMeta = JSON.parse(existingRoom.metadata || '{}');
                     if (parsedMeta.waitingRoom) isWaitingRoomEnabled = true;
                 } catch(e) {}
+
+                // Check if returning user is the host
+                if (parsedMeta.hostIdentity === username) {
+                    role = 'host';
+                }
             } else {
-                // First person to join the room is always the host
+                // Pre-create room with host metadata
+                await svc.createRoom({
+                    name: room,
+                    emptyTimeout: 300,
+                    metadata: JSON.stringify({ hostIdentity: username, waitingRoom: false })
+                });
                 role = 'host';
             }
         } catch (e) {
-            console.warn('[Token API] Could not list rooms, defaulting to participant', e.message);
-        }
-
-        // If user claims to be creator and room doesn't exist, they are definitely host
-        if (isCreator && !roomExists) {
-            role = 'host';
+            console.warn('[Token API] Room checking/creation error:', e.message);
         }
 
         console.log(`[Token API] 🎯 Room "${room}" -> User "${username}" (role: ${role})`);
