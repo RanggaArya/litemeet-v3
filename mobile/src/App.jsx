@@ -638,6 +638,15 @@ export default function App() {
     const last = loadLastUser();
     if (last.name) setName(last.name);
     if (last.room) setRoom(last.room);
+
+    try {
+      const savedAuth = localStorage.getItem('litemeet_google_auth');
+      if (savedAuth) {
+        const user = JSON.parse(savedAuth);
+        if (user.name) setName(user.name);
+        if (user.photoURL) setPhotoURL(user.photoURL);
+      }
+    } catch {}
   }, []);
 
   useEffect(() => {
@@ -757,7 +766,7 @@ export default function App() {
                   <div style={{ color: '#fff', fontSize: 13, fontWeight: 'bold', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{name}</div>
                   <div style={{ color: '#10b981', fontSize: 10, fontWeight: 'bold' }}>✓ Login Google</div>
                 </div>
-                <button onClick={() => { setPhotoURL(''); setName(''); GoogleAuth.signOut().catch(()=>{}); }} style={{ background: 'rgba(239,68,68,0.2)', border: 'none', padding: '4px 8px', borderRadius: 6, color: '#fca5a5', fontSize: 10, fontWeight: 'bold' }}>Logout</button>
+                <button onClick={() => { setPhotoURL(''); setName(''); localStorage.removeItem('litemeet_google_auth'); GoogleAuth.signOut().catch(()=>{}); }} style={{ background: 'rgba(239,68,68,0.2)', border: 'none', padding: '4px 8px', borderRadius: 6, color: '#fca5a5', fontSize: 10, fontWeight: 'bold' }}>Logout</button>
               </div>
             ) : (
               <>
@@ -765,8 +774,10 @@ export default function App() {
                   onClick={async () => {
                     try {
                       const user = await GoogleAuth.signIn();
-                      setName(user.displayName || user.name);
+                      const uName = user.displayName || user.name;
+                      setName(uName);
                       setPhotoURL(user.imageUrl);
+                      localStorage.setItem('litemeet_google_auth', JSON.stringify({ name: uName, photoURL: user.imageUrl }));
                     } catch (e) {
                       console.warn('Google Auth Error:', e);
                     }

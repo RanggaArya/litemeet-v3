@@ -216,6 +216,16 @@ async function createWindow() {
     }
   });
 
+  // --- ALLOW POPUPS FOR FIREBASE AUTH ---
+  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
+    return {
+      action: 'allow',
+      overrideBrowserWindowOptions: {
+        autoHideMenuBar: true,
+      }
+    };
+  });
+
   // --- Enable Screen Sharing di Electron ---
   // Electron tidak support getDisplayMedia secara native, jadi kita intercept request-nya
   mainWindow.webContents.session.setDisplayMediaRequestHandler(async (request, callback) => {
