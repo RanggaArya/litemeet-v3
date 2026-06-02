@@ -4,4 +4,5 @@
     <string name="title_activity_main">LiteMeet</string>
     <string name="package_name">com.aralya.litemeet</string>
     <string name="custom_url_scheme">com.aralya.litemeet</string>
+    <string name="server_client_id">531453224720-1b50s14gvd4dt3curt4r2q4hu2gtt8r0.apps.googleusercontent.com</string>
 </resources>

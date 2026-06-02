@@ -3,7 +3,7 @@ import { NextResponse } from 'next/server';
 
 export async function POST(req) {
     try {
-        const { room, username } = await req.json();
+        const { room, username, photoURL, role, e2ee } = await req.json();
 
         if (!room || !username) {
             return NextResponse.json({ error: 'Missing room or username' }, { status: 400 });
@@ -18,14 +18,29 @@ export async function POST(req) {
             return NextResponse.json({ error: 'Server configuration error' }, { status: 500 });
         }
 
-        console.log(`[Token API] 🎯 Room "${room}" → Connecting to Vercel ENV Server`);
+        console.log(`[Token API] 🎯 Room "${room}" → User "${username}" (role: ${role || 'participant'})`);
 
         try {
-            const at = new AccessToken(apiKey, apiSecret, {
-                identity: username,
+            // Build participant metadata
+            const metadata = JSON.stringify({
+                photoURL: photoURL || '',
+                role: role || 'participant', // 'host' | 'participant'
+                authMethod: photoURL ? 'google' : 'guest',
+                e2ee: e2ee || false,
             });
 
-            at.addGrant({ roomJoin: true, room: room, canPublishData: true });
+            const at = new AccessToken(apiKey, apiSecret, {
+                identity: username,
+                metadata: metadata,
+            });
+
+            at.addGrant({
+                roomJoin: true,
+                room: room,
+                canPublishData: true,
+                canUpdateOwnMetadata: true,
+            });
+
             const token = await at.toJwt();
 
             return NextResponse.json({

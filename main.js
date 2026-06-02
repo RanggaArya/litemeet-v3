@@ -189,7 +189,7 @@ function createSplashWindow() {
       <div class="loader-bar"></div>
     </div>
 
-    <div class="version">v0.1.8 · Powered by Aralya</div>
+    <div class="version">v0.2.0 · Powered by Aralya</div>
   </body>
   </html>
   `;

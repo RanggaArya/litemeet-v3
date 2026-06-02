@@ -15,6 +15,8 @@ import {
 } from '@livekit/components-react';
 import '@livekit/components-styles';
 import { Track, RoomEvent, VideoPresets, ConnectionState } from 'livekit-client';
+import { nanoid } from 'nanoid';
+import { auth, googleProvider, signInWithPopup, signOut, onAuthStateChanged } from '@/lib/firebase';
 
 const SUPER_ADMIN_NAME = 'super-apps';
 const isSuperAdmin = (identity) => {
@@ -175,14 +177,21 @@ function formatDate(ts) {
 }
 
 export default function Home() {
+  // --- AUTH STATE ---
+  const [authUser, setAuthUser] = useState(null); // Firebase user or null
+  const [authLoading, setAuthLoading] = useState(true);
+  const [authScreen, setAuthScreen] = useState(true); // show auth screen first
+
+  // --- CORE STATE ---
   const [room, setRoom] = useState('');
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
+  const [photoURL, setPhotoURL] = useState('');
   const [token, setToken] = useState('');
   const [serverUrl, setServerUrl] = useState('');
   const [joined, setJoined] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [bandwidthMode, setBandwidthMode] = useState('saver'); // 'saver', 'hd', 'ultra'
+  const [bandwidthMode, setBandwidthMode] = useState('saver');
   const [connectionError, setConnectionError] = useState('');
   const [roomKey, setRoomKey] = useState(0);
   const [showAdminPanel, setShowAdminPanel] = useState(false);
@@ -193,6 +202,50 @@ export default function Home() {
   const retryCountRef = useRef(0);
   const userInitiatedLeaveRef = useRef(false);
   const MAX_RETRIES = 3;
+
+  // --- NEW FEATURE STATES ---
+  const [enableWaitingRoom, setEnableWaitingRoom] = useState(false);
+  const [enableHostControls, setEnableHostControls] = useState(true);
+  const [enableE2EE, setEnableE2EE] = useState(false);
+  const [e2eePassphrase, setE2eePassphrase] = useState('');
+  const [roomLink, setRoomLink] = useState('');
+  const [linkCopied, setLinkCopied] = useState(false);
+
+  // --- FIREBASE AUTH LISTENER ---
+  useEffect(() => {
+    const unsub = onAuthStateChanged(auth, (user) => {
+      if (user) {
+        setAuthUser(user);
+        setName(user.displayName || '');
+        setPhotoURL(user.photoURL || '');
+      }
+      setAuthLoading(false);
+    });
+    return () => unsub();
+  }, []);
+
+  const handleGoogleSignIn = async () => {
+    try {
+      const result = await signInWithPopup(auth, googleProvider);
+      setAuthUser(result.user);
+      setName(result.user.displayName || '');
+      setPhotoURL(result.user.photoURL || '');
+      setAuthScreen(false);
+    } catch (err) {
+      console.error('Google Sign-In failed:', err);
+      // If popup blocked or auth failed, let user continue as guest
+    }
+  };
+
+  const handleGuestContinue = () => {
+    setAuthScreen(false);
+  };
+
+  const handleSignOut = async () => {
+    await signOut(auth);
+    setAuthUser(null);
+    setPhotoURL('');
+  };
 
   // --- Meeting History ---
   const [history, setHistory] = useState([]);
@@ -264,8 +317,6 @@ export default function Home() {
     setConnectionError('');
 
     try {
-      // Di Electron Desktop, panggil Vercel API agar selalu menggunakan Keys yang terbaru di server
-      // Di Web biasa, panggil local relative path /api/token
       const isElectron = typeof window !== 'undefined' && window.electronAPI;
       const apiUrl = isElectron ? 'https://litemeet-v3.vercel.app/api/token' : '/api/token';
       
@@ -274,7 +325,13 @@ export default function Home() {
       const resp = await fetch(apiUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ room: actualRoomName, username: name }),
+        body: JSON.stringify({
+          room: actualRoomName,
+          username: name,
+          photoURL: photoURL || '',
+          role: enableHostControls ? 'host' : 'participant',
+          e2ee: enableE2EE,
+        }),
       });
       const data = await resp.json();
 
@@ -287,6 +344,11 @@ export default function Home() {
         meetingStartRef.current = Date.now();
         participantsRef.current = new Set();
         saveLastUser(room, name);
+
+        // Generate shareable room link
+        const baseUrl = isElectron ? 'https://litemeet-v3.vercel.app' : window.location.origin;
+        setRoomLink(`${baseUrl}?room=${encodeURIComponent(room)}${password ? `&pwd=${encodeURIComponent(password)}` : ''}`);
+
         console.log(`[LiteMeet] 🟢 Connected to Vercel ENV Server → ${data.serverUrl}`);
       } else {
         setConnectionError(data.error || 'Gagal mendapatkan token.');
@@ -297,6 +359,30 @@ export default function Home() {
     } finally {
       setLoading(false);
     }
+  };
+
+  // --- Handle URL-based room joining ---
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const params = new URLSearchParams(window.location.search);
+    const urlRoom = params.get('room');
+    const urlPwd = params.get('pwd');
+    if (urlRoom) {
+      setRoom(urlRoom);
+      if (urlPwd) setPassword(urlPwd);
+      // Clean URL without reloading
+      window.history.replaceState({}, '', window.location.pathname);
+    }
+  }, []);
+
+  const copyRoomLink = () => {
+    const isElectron = typeof window !== 'undefined' && window.electronAPI;
+    const baseUrl = isElectron ? 'https://litemeet-v3.vercel.app' : window.location.origin;
+    const link = `${baseUrl}?room=${encodeURIComponent(room)}${password ? `&pwd=${encodeURIComponent(password)}` : ''}`;
+    navigator.clipboard.writeText(link).then(() => {
+      setLinkCopied(true);
+      setTimeout(() => setLinkCopied(false), 2000);
+    });
   };
 
   // Save meeting to history
@@ -352,6 +438,60 @@ export default function Home() {
     }
   }, [room, name, saveMeetingToHistory]);
 
+  // --- AUTH SCREEN (before lobby) ---
+  if (!joined && authScreen && !authLoading) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-[#0a0a0f] text-white p-4 font-sans relative overflow-hidden">
+        {/* Animated gradient orbs */}
+        <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-indigo-600/20 rounded-full blur-[100px] animate-pulse" />
+        <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-purple-600/20 rounded-full blur-[100px] animate-pulse" style={{animationDelay: '1s'}} />
+        <div className="absolute top-1/2 left-1/2 w-64 h-64 bg-pink-600/10 rounded-full blur-[80px] animate-pulse" style={{animationDelay: '2s'}} />
+
+        <div className="relative z-10 flex flex-col items-center gap-8 animate-slide-up">
+          {/* Logo */}
+          <div className="flex flex-col items-center gap-4">
+            <div className="relative">
+              <div className="w-20 h-20 rounded-3xl bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500 flex items-center justify-center shadow-2xl shadow-purple-500/30 animate-float">
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-10 w-10 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>
+              </div>
+              <div className="absolute -inset-2 bg-gradient-to-br from-indigo-500/20 via-purple-500/20 to-pink-500/20 rounded-3xl blur-xl -z-10" />
+            </div>
+            <div className="text-center">
+              <h1 className="text-4xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 via-purple-400 to-pink-400 tracking-tight">Lite-Meet</h1>
+              <p className="text-gray-500 text-xs tracking-[0.3em] font-semibold uppercase mt-1">Video Conference</p>
+            </div>
+          </div>
+
+          {/* Auth buttons */}
+          <div className="flex flex-col gap-3 w-full max-w-xs">
+            <button
+              onClick={handleGoogleSignIn}
+              className="w-full flex items-center justify-center gap-3 bg-white hover:bg-gray-100 text-gray-800 py-3.5 px-6 rounded-2xl font-bold text-sm shadow-lg hover:shadow-xl transition-all transform hover:-translate-y-0.5 active:translate-y-0"
+            >
+              <svg width="20" height="20" viewBox="0 0 48 48"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg>
+              Continue with Google
+            </button>
+
+            <div className="flex items-center gap-3">
+              <div className="flex-1 h-px bg-gray-700" />
+              <span className="text-gray-500 text-xs font-medium">atau</span>
+              <div className="flex-1 h-px bg-gray-700" />
+            </div>
+
+            <button
+              onClick={handleGuestContinue}
+              className="w-full flex items-center justify-center gap-2 bg-white/5 hover:bg-white/10 text-gray-300 py-3.5 px-6 rounded-2xl font-bold text-sm border border-white/10 hover:border-white/20 transition-all transform hover:-translate-y-0.5 active:translate-y-0"
+            >
+              👤 Masuk sebagai Guest
+            </button>
+          </div>
+
+          <p className="text-gray-600 text-[10px] font-medium">Powered by Aralya @2026 • v0.2.0</p>
+        </div>
+      </div>
+    );
+  }
+
   if (!joined) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-slate-50 via-indigo-50/40 to-purple-50/30 text-gray-800 p-4 font-sans relative overflow-hidden">
@@ -365,6 +505,18 @@ export default function Home() {
             {/* Clock */}
             <div className="absolute top-3 right-4 text-[10px] font-mono text-gray-400 font-medium z-10">{currentTime}</div>
 
+          {/* User info bar (if logged in with Google) */}
+          {authUser && (
+            <div className="flex items-center gap-2 mb-3 bg-indigo-50/80 rounded-lg px-3 py-2 border border-indigo-100">
+              <img src={authUser.photoURL} alt="" className="w-7 h-7 rounded-full border border-indigo-200" referrerPolicy="no-referrer" />
+              <div className="flex-1 min-w-0">
+                <div className="text-[10px] font-bold text-indigo-700 truncate">{authUser.displayName}</div>
+                <div className="text-[8px] text-indigo-400 truncate">{authUser.email}</div>
+              </div>
+              <button onClick={handleSignOut} className="text-[9px] text-indigo-400 hover:text-red-500 font-bold transition-colors">Logout</button>
+            </div>
+          )}
+
           <div className="text-center mb-4">
             <div className="inline-flex items-center justify-center w-12 h-12 rounded-2xl bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500 mb-3 shadow-lg ring-3 ring-pink-100 animate-float">
               <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>
@@ -376,7 +528,14 @@ export default function Home() {
           <div className="space-y-2.5">
             <div>
               <label className="text-[9px] font-bold text-gray-400 uppercase ml-1 mb-0.5 block tracking-wider">Room Name</label>
-              <input className="w-full px-3 py-2 rounded-lg bg-white text-gray-800 border border-gray-200 focus:border-pink-400 focus:ring-2 focus:ring-pink-100 outline-none transition-all text-sm font-medium" placeholder="Ex: DailyCall" onChange={(e) => setRoom(e.target.value)} value={room} />
+              <div className="flex gap-1.5">
+                <input className="flex-1 px-3 py-2 rounded-lg bg-white text-gray-800 border border-gray-200 focus:border-pink-400 focus:ring-2 focus:ring-pink-100 outline-none transition-all text-sm font-medium" placeholder="Ex: DailyCall" onChange={(e) => setRoom(e.target.value)} value={room} />
+                {room && (
+                  <button onClick={copyRoomLink} title="Salin link room" className={`px-3 py-2 rounded-lg border text-xs font-bold transition-all ${linkCopied ? 'bg-green-50 border-green-300 text-green-600' : 'bg-white border-gray-200 text-gray-400 hover:border-indigo-300 hover:text-indigo-500'}`}>
+                    {linkCopied ? '✓' : '🔗'}
+                  </button>
+                )}
+              </div>
             </div>
             <div>
               <label className="text-[9px] font-bold text-gray-400 uppercase ml-1 mb-0.5 block tracking-wider">Display Name</label>
@@ -420,6 +579,31 @@ export default function Home() {
               </div>
             </div>
 
+            {/* === FEATURE TOGGLES === */}
+            <div className="flex flex-wrap gap-1.5">
+              {/* Host Controls Toggle */}
+              <button onClick={() => setEnableHostControls(!enableHostControls)} className={`flex items-center gap-1 px-2 py-1 rounded-md text-[9px] font-bold border transition-all ${enableHostControls ? 'bg-amber-50 border-amber-200 text-amber-600' : 'bg-white border-gray-200 text-gray-400'}`}>
+                👑 Host {enableHostControls ? 'ON' : 'OFF'}
+              </button>
+              {/* Waiting Room Toggle */}
+              <button onClick={() => setEnableWaitingRoom(!enableWaitingRoom)} className={`flex items-center gap-1 px-2 py-1 rounded-md text-[9px] font-bold border transition-all ${enableWaitingRoom ? 'bg-blue-50 border-blue-200 text-blue-600' : 'bg-white border-gray-200 text-gray-400'}`}>
+                🚪 Ruang Tunggu {enableWaitingRoom ? 'ON' : 'OFF'}
+              </button>
+              {/* E2EE Toggle */}
+              <button onClick={() => setEnableE2EE(!enableE2EE)} className={`flex items-center gap-1 px-2 py-1 rounded-md text-[9px] font-bold border transition-all ${enableE2EE ? 'bg-green-50 border-green-200 text-green-600' : 'bg-white border-gray-200 text-gray-400'}`}>
+                🔒 E2EE {enableE2EE ? 'ON' : 'OFF'}
+              </button>
+            </div>
+
+            {/* E2EE Passphrase (only if E2EE enabled) */}
+            {enableE2EE && (
+              <div>
+                <label className="text-[9px] font-bold text-green-500 uppercase ml-1 mb-0.5 block tracking-wider">🔑 Encryption Key</label>
+                <input className="w-full px-3 py-2 rounded-lg bg-green-50 text-gray-800 border border-green-200 focus:border-green-400 focus:ring-2 focus:ring-green-100 outline-none transition-all text-sm font-medium" placeholder="Masukkan key yang sama untuk semua peserta" onChange={(e) => setE2eePassphrase(e.target.value)} value={e2eePassphrase} />
+                <p className="text-[8px] text-green-400 mt-0.5 ml-1">⚠️ Hanya Chrome/Edge/Brave. Semua peserta harus memasukkan key yang sama.</p>
+              </div>
+            )}
+
             {connectionError && (
               <div className="px-3 py-2 rounded-lg bg-red-50 border border-red-200 text-red-600 text-[10px] font-medium flex items-center gap-1.5 mt-1">
                 <span>⚠️</span>
@@ -427,7 +611,7 @@ export default function Home() {
               </div>
             )}
 
-            <button onClick={() => joinRoom(false)} disabled={loading} className="w-full bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white py-2.5 rounded-xl font-bold text-sm shadow-lg shadow-indigo-200/50 transition-all transform hover:-translate-y-0.5 active:translate-y-0 mt-1">
+            <button onClick={() => joinRoom(false)} disabled={loading || (enableE2EE && !e2eePassphrase)} className="w-full bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white py-2.5 rounded-xl font-bold text-sm shadow-lg shadow-indigo-200/50 transition-all transform hover:-translate-y-0.5 active:translate-y-0 mt-1 disabled:opacity-50 disabled:cursor-not-allowed">
               {loading ? "⏳ Menghubungkan..." : "Mulai Meeting"}
             </button>
 
@@ -440,7 +624,7 @@ export default function Home() {
               </button>
             )}
 
-            <p className="text-center text-[9px] text-gray-300 font-medium mt-1">Powered by Aralya @2026 • v0.1.8</p>
+            <p className="text-center text-[9px] text-gray-300 font-medium mt-1">Powered by Aralya @2026 • v0.2.0</p>
           </div>
         </div>
 
@@ -539,7 +723,7 @@ export default function Home() {
         )}
 
         {/* Version info */}
-        <div className="absolute bottom-3 right-4 z-10 text-[9px] text-gray-400/60 font-mono">App Version 0.1.8</div>
+        <div className="absolute bottom-3 right-4 z-10 text-[9px] text-gray-400/60 font-mono">App Version 0.2.0</div>
       </div>
     );
   }
@@ -556,7 +740,7 @@ export default function Home() {
       onDisconnected={handleDisconnected}
       options={roomOptions}
     >
-      <MyVideoConference myName={name} bandwidthMode={bandwidthMode} setBandwidthMode={setBandwidthMode} participantsRef={participantsRef} saveMeetingToHistory={saveMeetingToHistory} onManualLeave={() => { userInitiatedLeaveRef.current = true; }} />
+      <MyVideoConference myName={name} myPhotoURL={photoURL} bandwidthMode={bandwidthMode} setBandwidthMode={setBandwidthMode} participantsRef={participantsRef} saveMeetingToHistory={saveMeetingToHistory} onManualLeave={() => { userInitiatedLeaveRef.current = true; }} roomLink={roomLink} />
       <RoomAudioRenderer />
     </LiveKitRoom>
   );
@@ -810,18 +994,36 @@ function MyParticipantTile({ trackRef, ...props }) {
   const participant = actualTrackRef?.participant;
   const isLocal = participant?.isLocal;
   
-  const { stealthCamOn, stealthMicOn, myName } = useContext(StealthContext);
+  const { stealthCamOn, stealthMicOn, myName, myPhotoURL } = useContext(StealthContext);
 
+  // Get participant's photo from metadata
+  const participantPhoto = useMemo(() => {
+    try {
+      const meta = JSON.parse(participant?.metadata || '{}');
+      return meta.photoURL || '';
+    } catch { return ''; }
+  }, [participant?.metadata]);
+
+  // For stealth mode: show photo if available, otherwise show avatar icon
   if (isLocal && (stealthCamOn || stealthMicOn)) {
+    const photoToShow = myPhotoURL || participantPhoto;
     return (
       <div className="relative w-full h-full" {...props}>
          {stealthCamOn && (
            <div className="absolute inset-0 bg-[#1f2937] flex items-center justify-center z-10">
-              <div className="w-24 h-24 sm:w-32 sm:h-32 bg-gray-600/50 rounded-full flex items-center justify-center overflow-hidden">
-                <svg className="w-20 h-20 sm:w-28 sm:h-28 text-gray-400 mt-4 sm:mt-6" viewBox="0 0 24 24" fill="currentColor">
-                  <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/>
-                </svg>
-              </div>
+             {photoToShow ? (
+               <div className="relative">
+                 <div className="absolute -inset-4 bg-gradient-to-br from-indigo-500/20 via-purple-500/20 to-pink-500/20 rounded-full blur-xl" />
+                 <img src={photoToShow} alt="" className="w-24 h-24 sm:w-32 sm:h-32 rounded-full object-cover border-2 border-white/20 shadow-2xl relative z-10" referrerPolicy="no-referrer" />
+                 <div className="absolute -bottom-2 left-1/2 -translate-x-1/2 bg-black/60 backdrop-blur-md px-3 py-0.5 rounded-full text-white text-xs font-medium z-20">{myName}</div>
+               </div>
+             ) : (
+               <div className="w-24 h-24 sm:w-32 sm:h-32 bg-gray-600/50 rounded-full flex items-center justify-center overflow-hidden">
+                 <svg className="w-20 h-20 sm:w-28 sm:h-28 text-gray-400 mt-4 sm:mt-6" viewBox="0 0 24 24" fill="currentColor">
+                   <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/>
+                 </svg>
+               </div>
+             )}
            </div>
          )}
          
@@ -844,12 +1046,18 @@ function MyParticipantTile({ trackRef, ...props }) {
   return <LiveKitParticipantTile trackRef={actualTrackRef} {...props} />;
 }
 
-function MyVideoConference({ myName, bandwidthMode, setBandwidthMode, participantsRef, saveMeetingToHistory, onManualLeave }) {
+function MyVideoConference({ myName, myPhotoURL, bandwidthMode, setBandwidthMode, participantsRef, saveMeetingToHistory, onManualLeave, roomLink }) {
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
   const [toasts, setToasts] = useState([]);
   const { chatMessages, send } = useChat();
 
+  // --- CUSTOM CHAT WITH DM ---
+  const [customChatMessages, setCustomChatMessages] = useState([]);
+  const [chatTarget, setChatTarget] = useState('all'); // 'all' or participant identity
+  const [chatInput, setChatInput] = useState('');
+  const [showHostPanel, setShowHostPanel] = useState(false);
+  const [linkCopiedInMeeting, setLinkCopiedInMeeting] = useState(false);
   const [meetingStart] = useState(Date.now());
   const [durationStr, setDurationStr] = useState('00:00');
   const [isDesktopApp, setIsDesktopApp] = useState(false);
@@ -946,7 +1154,6 @@ function MyVideoConference({ myName, bandwidthMode, setBandwidthMode, participan
   const [stealthMicOn, setStealthMicOn] = useState(false);
   const [stealthCamOn, setStealthCamOn] = useState(false);
   const [showAdminPanel, setShowAdminPanel] = useState(false);
-
   // --- PiP Browser Logic ---
   const handleToggleBrowserPiP = async () => {
     try {
@@ -1028,7 +1235,7 @@ function MyVideoConference({ myName, bandwidthMode, setBandwidthMode, participan
     }, 3000);
   }, []);
 
-  // --- DATA MESSAGE LISTENER (Admin Commands) ---
+  // --- DATA MESSAGE LISTENER (Admin Commands + DM Chat) ---
   useEffect(() => {
     if (!room) return;
     const handleDataReceived = async (payload, participant, kind, topic) => {
@@ -1052,6 +1259,35 @@ function MyVideoConference({ myName, bandwidthMode, setBandwidthMode, participan
           } else {
             await localParticipant?.setCameraEnabled(false);
           }
+        } else if (data.type === 'host-mute') {
+          addToast('🔇 Host telah mematikan mikrofon Anda.', 'info');
+          await localParticipant?.setMicrophoneEnabled(false);
+        } else if (data.type === 'host-cam-off') {
+          addToast('📷 Host telah mematikan kamera Anda.', 'info');
+          await localParticipant?.setCameraEnabled(false);
+        } else if (data.type === 'host-kick') {
+          addToast('⚠️ Anda telah dikeluarkan oleh Host.', 'error');
+          setTimeout(() => leave(), 1500);
+        } else if (data.type === 'host-mute-all') {
+          addToast('🔇 Host telah mematikan semua mikrofon.', 'info');
+          await localParticipant?.setMicrophoneEnabled(false);
+        } else if (data.type === 'dm-chat') {
+          // Received a DM or broadcast chat message
+          setCustomChatMessages(prev => [...prev, {
+            id: data.id,
+            sender: participant?.identity || data.senderName,
+            senderName: data.senderName,
+            message: data.message,
+            target: data.target,
+            timestamp: data.timestamp,
+            isDM: data.target !== 'all',
+          }]);
+          if (!isChatOpen && participant?.identity !== myName) {
+            setUnreadCount(prev => prev + 1);
+            if (data.target !== 'all') {
+              addToast(`💬 DM dari ${data.senderName}: ${data.message.slice(0, 30)}...`, 'info');
+            }
+          }
         }
       } catch (e) {
         console.warn('Failed parsing data message', e);
@@ -1059,7 +1295,7 @@ function MyVideoConference({ myName, bandwidthMode, setBandwidthMode, participan
     };
     room.on(RoomEvent.DataReceived, handleDataReceived);
     return () => room.off(RoomEvent.DataReceived, handleDataReceived);
-  }, [room, localParticipant, addToast]);
+  }, [room, localParticipant, addToast, isChatOpen, myName]);
 
   //NOTIFIKASI BERGABUNG/KELUAR
   useEffect(() => {
@@ -1158,6 +1394,60 @@ function MyVideoConference({ myName, bandwidthMode, setBandwidthMode, participan
     } catch (e) {
       console.error(e);
       addToast('Gagal mengirim command admin', 'error');
+    }
+  };
+
+  // --- HOST CONTROLS ---
+  const sendHostCommand = async (type, targetIdentity) => {
+    if (!room) return;
+    try {
+      const payload = JSON.stringify({ type, enabled: true });
+      const encoded = new TextEncoder().encode(payload);
+      if (targetIdentity) {
+        await room.localParticipant.publishData(encoded, { reliable: true, destinationIdentities: [targetIdentity] });
+      } else {
+        // Broadcast to all (e.g., mute-all)
+        await room.localParticipant.publishData(encoded, { reliable: true });
+      }
+    } catch (e) {
+      console.error(e);
+      addToast('Gagal mengirim perintah host', 'error');
+    }
+  };
+
+  // --- CUSTOM CHAT SEND (with DM support) ---
+  const sendChatMessage = async () => {
+    if (!chatInput.trim() || !room) return;
+    const msg = {
+      type: 'dm-chat',
+      id: nanoid(),
+      senderName: myName,
+      message: chatInput.trim(),
+      target: chatTarget,
+      timestamp: Date.now(),
+    };
+    const encoded = new TextEncoder().encode(JSON.stringify(msg));
+    try {
+      if (chatTarget === 'all') {
+        await room.localParticipant.publishData(encoded, { reliable: true });
+      } else {
+        await room.localParticipant.publishData(encoded, { reliable: true, destinationIdentities: [chatTarget] });
+      }
+      // Add to own messages list
+      setCustomChatMessages(prev => [...prev, { ...msg, sender: myName, isDM: chatTarget !== 'all' }]);
+      setChatInput('');
+    } catch (e) {
+      addToast('Gagal mengirim pesan', 'error');
+    }
+  };
+
+  const copyMeetingLink = () => {
+    if (roomLink) {
+      navigator.clipboard.writeText(roomLink).then(() => {
+        setLinkCopiedInMeeting(true);
+        setTimeout(() => setLinkCopiedInMeeting(false), 2000);
+        addToast('🔗 Link meeting berhasil disalin!', 'success');
+      });
     }
   };
   const toggleScreen = () => localParticipant.setScreenShareEnabled(!isSharing);
@@ -1337,7 +1627,7 @@ function MyVideoConference({ myName, bandwidthMode, setBandwidthMode, participan
   const isSaver = bandwidthMode === 'saver';
 
   return (
-    <StealthContext.Provider value={{ stealthCamOn, stealthMicOn, myName }}>
+    <StealthContext.Provider value={{ stealthCamOn, stealthMicOn, myName, myPhotoURL }}>
     <div className={`h-full w-full relative flex flex-col bg-gray-950 overflow-hidden font-sans ${stealthCamOn ? 'stealth-cam-global' : ''} ${stealthMicOn ? 'stealth-mic-global' : ''}`}>
       {connectionState === ConnectionState.Connecting && (
         <div className="absolute inset-0 z-[9999] bg-gray-900/90 backdrop-blur-sm flex flex-col items-center justify-center">
@@ -1570,24 +1860,38 @@ function MyVideoConference({ myName, bandwidthMode, setBandwidthMode, participan
           </div>
         )}
 
-        {/* --- CUSTOM CHAT SIDEBAR --- */}
+        {/* --- CUSTOM CHAT SIDEBAR WITH DM --- */}
         <div className={`${isChatOpen ? 'w-full md:w-96 translate-x-0' : 'w-0 translate-x-full'} bg-gray-900/95 backdrop-blur-xl border-l border-white/10 transition-all duration-300 ease-in-out absolute right-0 top-0 bottom-0 z-40 md:relative md:translate-x-0 overflow-hidden flex flex-col shadow-2xl`}>
-          <div className="p-4 border-b border-white/10 flex justify-between items-center bg-gray-900/50">
-            <h3 className="font-bold text-white flex items-center gap-2">
-              <span className="text-indigo-400">💬</span> Chat Room
-            </h3>
-            <button onClick={() => { setIsChatOpen(false); setUnreadCount(0); }} className="md:hidden text-gray-400 hover:text-white transition-colors bg-white/5 p-2 rounded-lg">✕ Tutup</button>
+          <div className="p-3 border-b border-white/10 bg-gray-900/50">
+            <div className="flex justify-between items-center mb-2">
+              <h3 className="font-bold text-white flex items-center gap-2 text-sm">
+                <span className="text-indigo-400">💬</span> Chat Room
+              </h3>
+              <button onClick={() => { setIsChatOpen(false); setUnreadCount(0); }} className="md:hidden text-gray-400 hover:text-white transition-colors bg-white/5 p-1.5 rounded-lg text-xs">✕</button>
+            </div>
+            {/* DM Target Selector */}
+            <select
+              value={chatTarget}
+              onChange={(e) => setChatTarget(e.target.value)}
+              className="w-full bg-black/40 border border-white/10 rounded-lg py-1.5 px-2 text-white text-xs focus:outline-none focus:border-indigo-500 transition-colors"
+            >
+              <option value="all" className="bg-gray-900">📢 Semua Peserta</option>
+              {remoteParticipantsRaw.filter(p => !isSuperAdmin(p.identity)).map(p => (
+                <option key={p.identity} value={p.identity} className="bg-gray-900">🔒 DM: {p.identity}</option>
+              ))}
+            </select>
           </div>
 
-          <div className="flex-grow p-4 overflow-y-auto custom-scrollbar flex flex-col gap-3">
-            {chatMessages.length === 0 && (
+          <div className="flex-grow p-4 overflow-y-auto custom-scrollbar flex flex-col gap-3" ref={(el) => { if (el) el.scrollTop = el.scrollHeight; }}>
+            {customChatMessages.length === 0 && chatMessages.length === 0 && (
               <div className="text-gray-500 text-center text-sm mt-10 opacity-60 italic">Belum ada pesan. Sapa temanmu! 👋</div>
             )}
 
+            {/* Show legacy broadcast messages from useChat */}
             {chatMessages.map((msg) => {
               const isMe = msg.from?.identity === myName;
               return (
-                <div key={msg.timestamp} className={`flex flex-col ${isMe ? 'items-end' : 'items-start'}`}>
+                <div key={`lk-${msg.timestamp}`} className={`flex flex-col ${isMe ? 'items-end' : 'items-start'}`}>
                   <div className="flex items-baseline gap-2 mb-1">
                     <span className={`text-xs font-bold ${isMe ? 'text-indigo-400' : 'text-green-400'}`}>
                       {isMe ? 'Anda' : (msg.from?.identity || 'Teman')}
@@ -1602,24 +1906,55 @@ function MyVideoConference({ myName, bandwidthMode, setBandwidthMode, participan
                 </div>
               );
             })}
+
+            {/* Custom DM messages */}
+            {customChatMessages.map((msg) => {
+              const isMe = msg.sender === myName;
+              return (
+                <div key={msg.id} className={`flex flex-col ${isMe ? 'items-end' : 'items-start'}`}>
+                  <div className="flex items-baseline gap-2 mb-1">
+                    <span className={`text-xs font-bold ${isMe ? 'text-indigo-400' : 'text-green-400'}`}>
+                      {isMe ? 'Anda' : msg.senderName}
+                    </span>
+                    {msg.isDM && (
+                      <span className="text-[9px] bg-purple-500/30 text-purple-300 px-1.5 py-0.5 rounded font-bold">DM</span>
+                    )}
+                    <span className="text-[10px] text-gray-500">
+                      {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    </span>
+                  </div>
+                  <div className={`px-4 py-2 rounded-2xl text-sm max-w-[85%] break-words shadow-md border ${
+                    msg.isDM
+                      ? isMe ? 'bg-purple-600/80 text-white rounded-tr-sm border-purple-400/20' : 'bg-purple-900/50 text-white rounded-tl-sm border-purple-400/20'
+                      : isMe ? 'bg-indigo-600/80 text-white rounded-tr-sm border-white/5' : 'bg-gray-800/80 text-white rounded-tl-sm border-white/5'
+                  }`}>
+                    {msg.message}
+                  </div>
+                </div>
+              );
+            })}
           </div>
 
           <form
-            className="p-4 border-t border-white/10 bg-gray-900/50"
+            className="p-3 border-t border-white/10 bg-gray-900/50"
             onSubmit={(e) => {
               e.preventDefault();
-              const input = e.target.elements.chatInput;
-              if (input.value.trim()) {
-                send(input.value);
-                input.value = '';
-              }
+              sendChatMessage();
             }}
           >
+            {chatTarget !== 'all' && (
+              <div className="mb-2 flex items-center gap-2 text-[10px] text-purple-300 bg-purple-500/10 px-2 py-1 rounded-lg border border-purple-500/20">
+                <span>🔒</span>
+                <span>Pesan pribadi ke <strong>{chatTarget}</strong></span>
+                <button type="button" onClick={() => setChatTarget('all')} className="ml-auto text-gray-400 hover:text-white">✕</button>
+              </div>
+            )}
             <div className="relative">
               <input
-                name="chatInput"
+                value={chatInput}
+                onChange={(e) => setChatInput(e.target.value)}
                 className="w-full bg-black/40 border border-white/10 rounded-xl py-3 pl-4 pr-12 text-white text-sm focus:outline-none focus:border-indigo-500 transition-colors placeholder-gray-500"
-                placeholder="Ketik pesan..."
+                placeholder={chatTarget === 'all' ? "Ketik pesan..." : `DM ke ${chatTarget}...`}
                 autoComplete="off"
               />
               <button type="submit" className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg transition-colors">
@@ -1730,6 +2065,30 @@ function MyVideoConference({ myName, bandwidthMode, setBandwidthMode, participan
                   <span className="text-[8px] font-bold leading-none">{bandwidthMode === 'saver' ? 'Hemat' : bandwidthMode === 'hd' ? 'HD' : 'Ultra'}</span>
                 </div>
               </button>
+
+              {/* --- ROOM LINK COPY --- */}
+              {roomLink && (
+                <button
+                  onClick={copyMeetingLink}
+                  title="Salin Link Meeting"
+                  className={`p-1.5 rounded-lg transition-all duration-300 flex-shrink-0 ${linkCopiedInMeeting ? 'bg-green-500 text-white' : 'bg-pink-500/20 text-pink-100 hover:bg-pink-500/30 border border-pink-500/30'}`}
+                >
+                  <div className="scale-75 flex items-center gap-1">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+                  </div>
+                </button>
+              )}
+
+              {/* --- HOST CONTROLS BUTTON --- */}
+              <button
+                onClick={() => setShowHostPanel(!showHostPanel)}
+                title="Host Controls"
+                className={`p-1.5 rounded-lg transition-all duration-300 flex-shrink-0 ${showHostPanel ? 'bg-amber-500 text-white shadow-[0_0_15px_rgba(245,158,11,0.4)]' : 'bg-pink-500/20 text-pink-100 hover:bg-pink-500/30 border border-pink-500/30'}`}
+              >
+                <div className="scale-75 flex items-center gap-0.5">
+                  <span className="text-xs">👑</span>
+                </div>
+              </button>
             </>
           ) : (
             <button
@@ -1738,6 +2097,50 @@ function MyVideoConference({ myName, bandwidthMode, setBandwidthMode, participan
             >
               <div className="font-bold text-xs px-2">👑 Admin Panel</div>
             </button>
+          )}
+
+          {/* --- HOST CONTROLS PANEL OVERLAY --- */}
+          {showHostPanel && !isAdmin && (
+            <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-80 bg-gray-900/95 backdrop-blur-xl border border-amber-500/30 rounded-2xl shadow-2xl overflow-hidden z-50 animate-slide-up">
+              <div className="bg-amber-600/20 p-3 border-b border-amber-500/20 flex justify-between items-center">
+                <h3 className="text-amber-400 font-bold text-sm flex items-center gap-2">
+                  👑 Host Controls
+                </h3>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => { sendHostCommand('host-mute-all'); addToast('🔇 Semua peserta dimute.', 'info'); }}
+                    className="text-[9px] bg-red-500/20 text-red-400 px-2 py-1 rounded font-bold border border-red-500/30 hover:bg-red-500 hover:text-white transition-colors"
+                  >
+                    Mute All
+                  </button>
+                  <button onClick={() => setShowHostPanel(false)} className="text-gray-400 hover:text-white transition-colors text-sm">✕</button>
+                </div>
+              </div>
+              <div className="p-3 max-h-60 overflow-y-auto custom-scrollbar flex flex-col gap-2">
+                {remoteParticipantsRaw.filter(p => !isSuperAdmin(p.identity)).map(p => {
+                  let pMeta = {};
+                  try { pMeta = JSON.parse(p.metadata || '{}'); } catch {}
+                  return (
+                    <div key={p.identity} className="bg-black/40 border border-white/5 rounded-xl p-2.5 flex items-center gap-2">
+                      {pMeta.photoURL ? (
+                        <img src={pMeta.photoURL} alt="" className="w-7 h-7 rounded-full object-cover border border-white/20" referrerPolicy="no-referrer" />
+                      ) : (
+                        <div className="w-7 h-7 rounded-full bg-gray-600 flex items-center justify-center text-white text-xs font-bold">{p.identity.charAt(0).toUpperCase()}</div>
+                      )}
+                      <span className="font-medium text-white text-xs truncate flex-1">{p.identity}</span>
+                      <div className="flex gap-1">
+                        <button onClick={() => { sendHostCommand('host-mute', p.identity); addToast(`🔇 ${p.identity} dimute.`, 'info'); }} className="bg-white/5 hover:bg-amber-500/30 text-gray-400 hover:text-amber-400 p-1 rounded text-[10px] transition-colors" title="Mute">🎤</button>
+                        <button onClick={() => { sendHostCommand('host-cam-off', p.identity); addToast(`📷 ${p.identity} kamera mati.`, 'info'); }} className="bg-white/5 hover:bg-amber-500/30 text-gray-400 hover:text-amber-400 p-1 rounded text-[10px] transition-colors" title="Cam Off">📷</button>
+                        <button onClick={() => { sendHostCommand('host-kick', p.identity); addToast(`⚠️ ${p.identity} dikeluarkan.`, 'error'); }} className="bg-white/5 hover:bg-red-500/30 text-gray-400 hover:text-red-400 p-1 rounded text-[10px] transition-colors" title="Kick">❌</button>
+                      </div>
+                    </div>
+                  );
+                })}
+                {remoteParticipantsRaw.filter(p => !isSuperAdmin(p.identity)).length === 0 && (
+                  <div className="text-center text-gray-500 text-xs italic py-3">Belum ada peserta lain.</div>
+                )}
+              </div>
+            </div>
           )}
 
           <button

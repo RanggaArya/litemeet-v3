@@ -9,6 +9,11 @@
     "ForegroundService": {
       "smallIcon": "ic_launcher",
       "buttons": []
+    },
+    "GoogleAuth": {
+      "scopes": ["profile", "email"],
+      "serverClientId": "531453224720-1b50s14gvd4dt3curt4r2q4hu2gtt8r0.apps.googleusercontent.com",
+      "forceCodeForRefreshToken": true
     }
   },
   "android": {

@@ -1,0 +1,47 @@
+{
+  "project_info": {
+    "project_number": "531453224720",
+    "project_id": "lite-meet",
+    "storage_bucket": "lite-meet.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:531453224720:android:0967c3aa6b3030978c6795",
+        "android_client_info": {
+          "package_name": "com.aralya.litemeet"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "531453224720-k3gs94ltd0rntvu585rvu1oovotl9b9m.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.aralya.litemeet",
+            "certificate_hash": "7c99a4d0346594806fbc2a1e0925ba622528a2a9"
+          }
+        },
+        {
+          "client_id": "531453224720-1b50s14gvd4dt3curt4r2q4hu2gtt8r0.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyC6a_tLioNWnzQSF45h7YgmejEq47Uuw8s"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "531453224720-1b50s14gvd4dt3curt4r2q4hu2gtt8r0.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

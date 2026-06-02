@@ -17,6 +17,7 @@
     "@capacitor/core": "^7.2.0",
     "@capacitor/status-bar": "^7.0.1",
     "@capawesome-team/capacitor-android-foreground-service": "^6.2.0",
+    "@codetrix-studio/capacitor-google-auth": "^3.4.0-rc.4",
     "@livekit/components-react": "^2.9.19",
     "@livekit/components-styles": "^1.2.0",
     "livekit-client": "^2.17.0",
