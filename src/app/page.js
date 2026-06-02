@@ -1049,8 +1049,6 @@ function MyParticipantTile({ trackRef, ...props }) {
     </div>
   );
 }
-}
-
 function MyVideoConference({ myName, myPhotoURL, bandwidthMode, setBandwidthMode, participantsRef, saveMeetingToHistory, onManualLeave, roomLink }) {
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
