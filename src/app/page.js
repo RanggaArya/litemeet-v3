@@ -204,6 +204,7 @@ export default function Home() {
   const [adminApiKey, setAdminApiKey] = useState('');
   const [adminApiSecret, setAdminApiSecret] = useState('');
   const [adminLoading, setAdminLoading] = useState(false);
+  const [autoJoinPending, setAutoJoinPending] = useState(false);
   const retryCountRef = useRef(0);
   const userInitiatedLeaveRef = useRef(false);
   const MAX_RETRIES = 3;
@@ -394,10 +395,23 @@ export default function Home() {
     if (urlRoom) {
       setRoom(urlRoom);
       if (urlPwd) setPassword(urlPwd);
+      setAutoJoinPending(true);
       // Clean URL without reloading
       window.history.replaceState({}, '', window.location.pathname);
     }
   }, []);
+
+  useEffect(() => {
+    if (autoJoinPending && !authLoading) {
+      // Wait a tiny bit for states to settle
+      setTimeout(() => {
+        if (name && room) {
+          joinRoom();
+        }
+      }, 500);
+      setAutoJoinPending(false);
+    }
+  }, [autoJoinPending, authLoading, name, room]);
 
   const copyRoomLink = () => {
     const isElectron = typeof window !== 'undefined' && window.electronAPI;
