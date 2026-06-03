@@ -246,6 +246,7 @@ export default function Home() {
   const [autoJoinPending, setAutoJoinPending] = useState(false);
   const retryCountRef = useRef(0);
   const userInitiatedLeaveRef = useRef(false);
+  const hostSecretRef = useRef(''); // Unique secret to prove host ownership
   const MAX_RETRIES = 3;
 
   // --- NEW FEATURE STATES ---
@@ -392,7 +393,7 @@ export default function Home() {
           username: name,
           photoURL: photoURL || '',
           email: authEmail || '',
-          isCreator: true, // Used to claim host role if room doesn't exist
+          hostSecret: hostSecretRef.current || '',
         }),
       });
       const data = await resp.json();
@@ -402,6 +403,10 @@ export default function Home() {
         setServerUrl(data.serverUrl);
         setInitialStatus(data.status || '');
         setInitialRole(data.role || '');
+        // Store the hostSecret returned by the API so we can reclaim host on reconnect
+        if (data.hostSecret) {
+          hostSecretRef.current = data.hostSecret;
+        }
         setJoined(true);
         retryCountRef.current = 0;
         userInitiatedLeaveRef.current = false;
@@ -1234,9 +1239,10 @@ function MyVideoConference({ myName, myPhotoURL, bandwidthMode, setBandwidthMode
     catch(e) { return {}; }
   }, [localParticipant?.metadata]);
 
-  // FIX: Make sure only true hosts (or super admins) get the host controls.
-  // If everyone uses the same name "Guest", they all might get role='host'. We also check isSuperAdmin to be safe.
-  const isHost = localMeta.role === 'host' || initialRole === 'host' || isSuperAdmin(myName);
+  // FIX: Only the true room creator (who has a valid hostSecret) or super admins get host controls.
+  // The hostSecret is generated server-side when the room is first created and returned only to the creator.
+  // This prevents other participants from getting host controls even if they share the same username.
+  const isHost = (!!hostSecretRef.current && (localMeta.role === 'host' || initialRole === 'host')) || isSuperAdmin(myName);
   const isWaiting = localMeta.status ? localMeta.status === 'waiting' : initialStatus === 'waiting';
 
   const [isWaitingRoomEnabled, setIsWaitingRoomEnabled] = useState(() => {

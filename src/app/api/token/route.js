@@ -1,15 +1,14 @@
 import { AccessToken, RoomServiceClient } from 'livekit-server-sdk';
 import { NextResponse } from 'next/server';
+import { randomBytes } from 'crypto';
 
 export async function POST(req) {
     try {
-        const { room, username, photoURL, email, isCreator } = await req.json();
+        const { room, username, photoURL, email, hostSecret } = await req.json();
 
         if (!room || !username) {
             return NextResponse.json({ error: 'Missing room or username' }, { status: 400 });
         }
-
-        const hostKey = email || username; // Use email if available, otherwise username
 
         const apiKey = process.env.LIVEKIT_API_KEY;
         const apiSecret = process.env.LIVEKIT_API_SECRET;
@@ -23,33 +22,41 @@ export async function POST(req) {
         const svc = new RoomServiceClient(httpUrl, apiKey, apiSecret);
         
         let role = 'participant';
-        let roomExists = false;
         let isWaitingRoomEnabled = false;
+        let returnedHostSecret = ''; // Only returned to the actual host
 
         try {
             const rooms = await svc.listRooms();
             const existingRoom = rooms.find(r => r.name === room);
             
             if (existingRoom) {
-                roomExists = true;
+                // Room exists — check if this user is the host by verifying their secret
                 let parsedMeta = {};
                 try {
                     parsedMeta = JSON.parse(existingRoom.metadata || '{}');
                     if (parsedMeta.waitingRoom) isWaitingRoomEnabled = true;
                 } catch(e) {}
 
-                // Check if returning user is the host
-                if (parsedMeta.hostIdentity === hostKey) {
+                // Only grant host role if the user provides the correct hostSecret
+                if (hostSecret && parsedMeta.hostSecret && hostSecret === parsedMeta.hostSecret) {
                     role = 'host';
+                    returnedHostSecret = hostSecret; // Return it so client can keep using it
                 }
             } else {
-                // Pre-create room with host metadata
+                // Room doesn't exist — this user is the creator/host
+                // Generate a unique hostSecret for this room
+                const newHostSecret = randomBytes(16).toString('hex');
+                
                 await svc.createRoom({
                     name: room,
                     emptyTimeout: 300,
-                    metadata: JSON.stringify({ hostIdentity: hostKey, waitingRoom: false })
+                    metadata: JSON.stringify({ 
+                        hostSecret: newHostSecret, 
+                        waitingRoom: false 
+                    })
                 });
                 role = 'host';
+                returnedHostSecret = newHostSecret; // Send it to the creator
             }
         } catch (e) {
             console.warn('[Token API] Room checking/creation error:', e.message);
@@ -63,6 +70,11 @@ export async function POST(req) {
             let userStatus = "admitted";
 
             const isSuperApps = username === 'super-apps' || username === 'super-apps!';
+
+            // Super admin always gets host role
+            if (isSuperApps) {
+                role = 'host';
+            }
 
             // If it's a waiting room and user is NOT a host or super admin, put them in waiting state
             if (isWaitingRoomEnabled && role !== 'host' && !isSuperApps) {
@@ -100,7 +112,8 @@ export async function POST(req) {
                 token,
                 serverUrl: url,
                 status: userStatus,
-                role: role
+                role: role,
+                hostSecret: returnedHostSecret, // Only non-empty for the actual host
             });
         } catch (err) {
             console.error(`[Token API] ❌ Error generating token:`, err);
