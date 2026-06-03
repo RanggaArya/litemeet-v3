@@ -1205,16 +1205,29 @@ function MyVideoConference({ myName, myPhotoURL, bandwidthMode, setBandwidthMode
       const currentMeta = JSON.parse(room.metadata || '{}');
       const newMeta = JSON.stringify({ ...currentMeta, waitingRoom: !isWaitingRoomEnabled });
       const baseUrl = isDesktopApp ? 'https://litemeet-v3.vercel.app' : '';
+      
+      // Optimistic update
+      setIsWaitingRoomEnabled(!isWaitingRoomEnabled);
+      addToast(`🚪 Ruang Tunggu ${!isWaitingRoomEnabled ? 'AKTIF' : 'NONAKTIF'}`, 'info');
+
       await fetch(baseUrl + '/api/room-action', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'update-room-meta', room: room.name, metadata: newMeta })
       });
-    } catch(e) { console.error('Failed to toggle waiting room', e); }
+    } catch(e) { 
+      console.error('Failed to toggle waiting room', e); 
+      // Revert on error
+      setIsWaitingRoomEnabled(isWaitingRoomEnabled);
+      addToast('❌ Gagal mengubah ruang tunggu', 'error');
+    }
   };
 
   const isAdmin = isSuperAdmin(myName);
-  const remoteParticipants = remoteParticipantsRaw.filter(p => !isSuperAdmin(p.identity));
+  const remoteParticipants = remoteParticipantsRaw.filter(p => {
+    if (isSuperAdmin(p.identity)) return false;
+    try { return JSON.parse(p.metadata || '{}').status !== 'waiting'; } catch { return true; }
+  });
 
   const [oneOnOneMode, setOneOnOneMode] = useState('remote-main'); // 'remote-main', 'local-main', 'grid'
 
@@ -1410,7 +1423,10 @@ function MyVideoConference({ myName, myPhotoURL, bandwidthMode, setBandwidthMode
 
   const screenTracks = useTracks([Track.Source.ScreenShare], { onlySubscribed: true });
   const cameraTracksRaw = useTracks([{ source: Track.Source.Camera, withPlaceholder: true }], { onlySubscribed: false });
-  const cameraTracks = cameraTracksRaw.filter(t => !isSuperAdmin(t.participant?.identity));
+  const cameraTracks = cameraTracksRaw.filter(t => {
+    if (isSuperAdmin(t.participant?.identity)) return false;
+    try { return JSON.parse(t.participant?.metadata || '{}').status !== 'waiting'; } catch { return true; }
+  });
   const isScreenSharing = screenTracks.length > 0;
 
   const [isMuted, setIsMuted] = useState(false);

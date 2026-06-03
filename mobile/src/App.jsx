@@ -511,9 +511,15 @@ function MeetingView({ myName, bandwidthMode, setBandwidthMode, participantsRef,
   }, [room]);
 
   const screenTracks = useTracks([Track.Source.ScreenShare], { onlySubscribed: true });
-  const cameraTracks = useTracks([{ source: Track.Source.Camera, withPlaceholder: true }], { onlySubscribed: false }).filter(t => !isSuperAdmin(t.participant?.identity));
+  const cameraTracks = useTracks([{ source: Track.Source.Camera, withPlaceholder: true }], { onlySubscribed: false }).filter(t => {
+    if (isSuperAdmin(t.participant?.identity)) return false;
+    try { return JSON.parse(t.participant?.metadata || '{}').status !== 'waiting'; } catch { return true; }
+  });
   const allTracks = screenTracks.length > 0 ? [...screenTracks, ...cameraTracks] : cameraTracks;
-  const filteredRemoteParticipants = remoteParticipants.filter(p => !isSuperAdmin(p.identity));
+  const filteredRemoteParticipants = remoteParticipants.filter(p => {
+    if (isSuperAdmin(p.identity)) return false;
+    try { return JSON.parse(p.metadata || '{}').status !== 'waiting'; } catch { return true; }
+  });
 
   // Saat PiP mode: sembunyikan semua UI, hanya tampilkan video
   if (isPipMode) {
