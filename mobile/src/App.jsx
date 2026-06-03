@@ -195,6 +195,7 @@ function MeetingView({ myName, bandwidthMode, setBandwidthMode, participantsRef,
   const remoteParticipants = useRemoteParticipants();
   const { chatMessages, send } = useChat();
   const [isChatOpen, setIsChatOpen] = useState(false);
+  const [chatInput, setChatInput] = useState('');
   const [unreadCount, setUnreadCount] = useState(0);
   const [toasts, setToasts] = useState([]);
   const [showMore, setShowMore] = useState(false);

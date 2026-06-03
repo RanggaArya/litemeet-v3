@@ -599,6 +599,11 @@ body {
   border-radius: 0 !important;
 }
 
+/* Ensure 16:9 cameras don't get cropped when displayed in the vertical PiP corner */
+.pip-self video {
+  object-fit: contain !important;
+}
+
 /* Layar tunggu peserta */
 .waiting-room {
   display: flex;
@@ -633,12 +638,13 @@ body {
 }
 
 .pip-active .pip-self {
-  width: 50px;
-  height: 75px;
-  top: 8px;
-  right: 8px;
-  border-radius: 8px;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.4);
+  width: 35px;
+  height: 50px;
+  top: 6px;
+  right: 6px;
+  border-radius: 6px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.6);
+  border: 1px solid rgba(255,255,255,0.2);
 }
 
 
