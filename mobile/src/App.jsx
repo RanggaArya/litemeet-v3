@@ -302,8 +302,6 @@ function MeetingView({ myName, bandwidthMode, setBandwidthMode, participantsRef,
   // Admin & Stealth States
   const [stealthMicOn, setStealthMicOn] = useState(false);
   const [stealthCamOn, setStealthCamOn] = useState(false);
-  const [initialRole, setInitialRole] = useState('participant');
-  const [initialStatus, setInitialStatus] = useState('admitted');
 
   // Track participants for history
   useEffect(() => {
@@ -1096,6 +1094,7 @@ export default function App() {
           </div>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            <div>
               <label className="lobby-label">Room Name</label>
               <input className="lobby-input" placeholder="Ex: DailyCall" value={room} onChange={e => setRoom(e.target.value)} />
             </div>
