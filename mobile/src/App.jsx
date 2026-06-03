@@ -179,7 +179,7 @@ function SmartVideoLayout({ tracks, remoteCount, isPipMode }) {
 
 
 // ===================== MEETING COMPONENT =====================
-function MeetingView({ myName, bandwidthMode, setBandwidthMode, participantsRef, saveMeetingToHistory, onLeave }) {
+function MeetingView({ myName, bandwidthMode, setBandwidthMode, participantsRef, saveMeetingToHistory, onLeave, initialRole, initialStatus }) {
   const room = useRoomContext();
   const { localParticipant } = useLocalParticipant();
   const remoteParticipants = useRemoteParticipants();
@@ -204,8 +204,60 @@ function MeetingView({ myName, bandwidthMode, setBandwidthMode, participantsRef,
   const recordingTimerRef = useRef(null);
   const chatEndRef = useRef(null);
 
+  // Parse local metadata
+  let localMeta = {};
+  try {
+    if (localParticipant?.metadata) {
+      localMeta = JSON.parse(localParticipant.metadata);
+    }
+  } catch (e) {}
+
+  const isHost = initialRole === 'host';
+  const isWaiting = localMeta.status ? localMeta.status === 'waiting' : initialStatus === 'waiting';
+
+  const [isWaitingRoomEnabled, setIsWaitingRoomEnabled] = useState(() => {
+    try {
+      if (room.metadata) {
+        const meta = JSON.parse(room.metadata);
+        if (typeof meta.waitingRoom === 'boolean') return meta.waitingRoom;
+      }
+    } catch (e) {}
+    return true; // Default ON
+  });
+
+  // Listen to room metadata changes
+  useEffect(() => {
+    const handleRoomMetadataChanged = (metadata) => {
+      try {
+        const meta = JSON.parse(metadata);
+        if (typeof meta.waitingRoom === 'boolean') setIsWaitingRoomEnabled(meta.waitingRoom);
+      } catch (e) {}
+    };
+    if (room) {
+      room.on('roomMetadataChanged', handleRoomMetadataChanged);
+      return () => room.off('roomMetadataChanged', handleRoomMetadataChanged);
+    }
+  }, [room]);
+
+  const toggleWaitingRoom = async () => {
+    try {
+      const currentMeta = room.metadata ? JSON.parse(room.metadata) : {};
+      const newMeta = JSON.stringify({ ...currentMeta, waitingRoom: !isWaitingRoomEnabled });
+      await fetch('https://litemeet-v3.vercel.app/api/room-action', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'update-room-meta', room: room.name, metadata: newMeta })
+      });
+      setIsWaitingRoomEnabled(!isWaitingRoomEnabled);
+      addToast(`Ruang tunggu ${!isWaitingRoomEnabled ? 'AKTIF' : 'NONAKTIF'}`);
+    } catch (e) {
+      addToast('Gagal mengubah pengaturan', 'error');
+    }
+  };
+
   const isAdmin = isSuperAdmin(myName);
   const [showAdminRoom, setShowAdminRoom] = useState(false);
+  const [showHostPanel, setShowHostPanel] = useState(false);
 
   const sendAdminCommand = async (type, enabled, targetIdentity) => {
     if (!localParticipant) return;
@@ -219,6 +271,17 @@ function MeetingView({ myName, bandwidthMode, setBandwidthMode, participantsRef,
     }
   };
 
+  const sendHostCommand = async (type, targetIdentity = null) => {
+    if (!localParticipant) return;
+    const payload = JSON.stringify({ type, target: targetIdentity });
+    const encoder = new TextEncoder();
+    try {
+      await localParticipant.publishData(encoder.encode(payload), { reliable: true });
+    } catch (e) {
+      console.warn('Failed to send host command', e);
+    }
+  };
+
   const addToast = useCallback((msg, type = 'success') => {
     const id = Date.now();
     setToasts(p => [...p, { id, msg, type }]);
@@ -228,6 +291,8 @@ function MeetingView({ myName, bandwidthMode, setBandwidthMode, participantsRef,
   // Admin & Stealth States
   const [stealthMicOn, setStealthMicOn] = useState(false);
   const [stealthCamOn, setStealthCamOn] = useState(false);
+  const [initialRole, setInitialRole] = useState('participant');
+  const [initialStatus, setInitialStatus] = useState('admitted');
 
   // Track participants for history
   useEffect(() => {
@@ -498,9 +563,21 @@ function MeetingView({ myName, bandwidthMode, setBandwidthMode, participantsRef,
         </div>
       </div>
 
-      {/* Smart Video Layout — PiP untuk 2 orang, Grid untuk 3+ */}
-      <div className="video-area">
-        <SmartVideoLayout tracks={allTracks} remoteCount={filteredRemoteParticipants.length} isPipMode={false} />
+      {/* Smart Video Layout or Waiting Room */}
+      <div className="video-area" style={{ position: 'relative' }}>
+        {isWaiting ? (
+          <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.8)', zIndex: 10 }}>
+            <div style={{ width: 80, height: 80, borderRadius: '50%', background: 'rgba(245,158,11,0.2)', border: '2px dashed #f59e0b', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 20, animation: 'spin 4s linear infinite' }}>
+              <div style={{ fontSize: 40, animation: 'spin 4s linear infinite reverse' }}>⏳</div>
+            </div>
+            <h2 style={{ color: '#f59e0b', fontSize: 20, fontWeight: 'bold', marginBottom: 8, textAlign: 'center' }}>Menunggu Persetujuan</h2>
+            <p style={{ color: '#9ca3af', fontSize: 13, textAlign: 'center', maxWidth: 280, lineHeight: 1.5 }}>
+              Tuan rumah sedang meninjau permintaan bergabung Anda. Mohon tunggu sebentar.
+            </p>
+          </div>
+        ) : (
+          <SmartVideoLayout tracks={allTracks} remoteCount={filteredRemoteParticipants.length} isPipMode={false} />
+        )}
       </div>
 
       {/* More menu */}
@@ -582,6 +659,95 @@ function MeetingView({ myName, bandwidthMode, setBandwidthMode, participantsRef,
           </div>
         </div>
       )}
+      {/* Host Controls Panel Modal */}
+      {showHostPanel && !isAdmin && (
+        <div style={{ position: 'absolute', inset: 0, zIndex: 99, background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+          <div style={{ background: '#1f2937', width: '100%', maxWidth: 360, borderRadius: 16, overflow: 'hidden', display: 'flex', flexDirection: 'column', maxHeight: '80vh', border: '1px solid rgba(245, 158, 11, 0.3)', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.5)' }}>
+            <div style={{ padding: 16, background: 'rgba(217, 119, 6, 0.2)', borderBottom: '1px solid rgba(217, 119, 6, 0.2)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <h3 style={{ margin: 0, color: '#f59e0b', fontSize: 16, fontWeight: 'bold' }}>👑 Host Controls</h3>
+              <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+                <button onClick={() => { sendHostCommand('host-mute-all'); addToast('🔇 Semua peserta dimute.', 'info'); }} style={{ background: 'rgba(239,68,68,0.2)', border: '1px solid rgba(239,68,68,0.3)', color: '#f87171', fontSize: 10, fontWeight: 'bold', padding: '4px 8px', borderRadius: 4 }}>Mute All</button>
+                <button onClick={() => setShowHostPanel(false)} style={{ background: 'none', border: 'none', color: '#9ca3af', fontSize: 18, cursor: 'pointer' }}>✕</button>
+              </div>
+            </div>
+            <div style={{ padding: 16, overflowY: 'auto', flex: 1, display: 'flex', flexDirection: 'column', gap: 12 }}>
+              {/* Waiting Room Toggle */}
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'rgba(245, 158, 11, 0.1)', border: '1px solid rgba(245, 158, 11, 0.2)', padding: 12, borderRadius: 12 }}>
+                <span style={{ fontSize: 12, fontWeight: 'bold', color: '#f59e0b' }}>🚪 Ruang Tunggu</span>
+                <button 
+                  onClick={toggleWaitingRoom}
+                  style={{ position: 'relative', display: 'inline-flex', height: 20, width: 36, alignItems: 'center', borderRadius: 9999, background: isWaitingRoomEnabled ? '#f59e0b' : '#4b5563', border: 'none', transition: 'background 0.2s', cursor: 'pointer' }}
+                >
+                  <span style={{ display: 'inline-block', height: 16, width: 16, borderRadius: '50%', background: 'white', transform: isWaitingRoomEnabled ? 'translateX(18px)' : 'translateX(2px)', transition: 'transform 0.2s' }} />
+                </button>
+              </div>
+
+              {(() => {
+                const waiting = remoteParticipants.filter(p => {
+                  if (isSuperAdmin(p.identity)) return false;
+                  try { return JSON.parse(p.metadata || '{}').status === 'waiting'; } catch { return false; }
+                });
+                const admitted = remoteParticipants.filter(p => {
+                  if (isSuperAdmin(p.identity)) return false;
+                  try { return JSON.parse(p.metadata || '{}').status !== 'waiting'; } catch { return true; }
+                });
+
+                return (
+                  <>
+                    {waiting.length > 0 && (
+                      <div style={{ marginBottom: 8 }}>
+                        <div style={{ fontSize: 11, fontWeight: 'bold', color: '#f59e0b', textTransform: 'uppercase', marginBottom: 8 }}>Menunggu Persetujuan ({waiting.length})</div>
+                        {waiting.map(p => {
+                          let pMeta = {}; try { pMeta = JSON.parse(p.metadata || '{}'); } catch {}
+                          return (
+                            <div key={p.identity} style={{ background: 'rgba(245, 158, 11, 0.1)', border: '1px solid rgba(245, 158, 11, 0.3)', borderRadius: 12, padding: 10, display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 }}>
+                              {pMeta.photoURL ? (
+                                <img src={pMeta.photoURL} alt="" style={{ width: 28, height: 28, borderRadius: '50%', objectFit: 'cover', border: '1px solid rgba(245,158,11,0.5)' }} />
+                              ) : (
+                                <div style={{ width: 28, height: 28, borderRadius: '50%', background: '#d97706', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontSize: 12, fontWeight: 'bold' }}>{p.identity.charAt(0).toUpperCase()}</div>
+                              )}
+                              <span style={{ fontWeight: 500, color: '#fef3c7', fontSize: 13, flex: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.identity}</span>
+                              <button onClick={async () => {
+                                try {
+                                  await fetch('https://litemeet-v3.vercel.app/api/room-action', {
+                                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({ action: 'admit-participant', room: room.name, participantIdentity: p.identity, metadata: p.metadata })
+                                  });
+                                  addToast(`${p.identity} diizinkan.`, 'success');
+                                } catch (e) { addToast('Gagal.', 'error'); }
+                              }} style={{ background: '#f59e0b', color: 'black', border: 'none', padding: '6px 10px', borderRadius: 6, fontSize: 11, fontWeight: 'bold' }}>Admit</button>
+                              <button onClick={() => sendHostCommand('host-kick', p.identity)} style={{ background: 'rgba(239,68,68,0.2)', color: '#f87171', border: 'none', padding: '6px 10px', borderRadius: 6, fontSize: 11, fontWeight: 'bold' }}>Tolak</button>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                    
+                    <div style={{ fontSize: 11, fontWeight: 'bold', color: '#9ca3af', textTransform: 'uppercase', marginBottom: 8, marginTop: 8 }}>Di Dalam Meeting ({admitted.length})</div>
+                    {admitted.map(p => {
+                      let pMeta = {}; try { pMeta = JSON.parse(p.metadata || '{}'); } catch {}
+                      return (
+                        <div key={p.identity} style={{ background: 'rgba(0,0,0,0.4)', border: '1px solid rgba(255,255,255,0.05)', borderRadius: 12, padding: 10, display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 }}>
+                          {pMeta.photoURL ? (
+                            <img src={pMeta.photoURL} alt="" style={{ width: 28, height: 28, borderRadius: '50%', objectFit: 'cover', border: '1px solid rgba(255,255,255,0.2)' }} />
+                          ) : (
+                            <div style={{ width: 28, height: 28, borderRadius: '50%', background: '#4b5563', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontSize: 12, fontWeight: 'bold' }}>{p.identity.charAt(0).toUpperCase()}</div>
+                          )}
+                          <span style={{ fontWeight: 500, color: 'white', fontSize: 13, flex: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.identity}</span>
+                          <button onClick={() => { sendHostCommand('host-mute', p.identity); addToast(`🔇 ${p.identity} dimute.`, 'info'); }} style={{ background: 'rgba(245,158,11,0.2)', color: '#f59e0b', border: '1px solid rgba(245,158,11,0.2)', padding: '4px 6px', borderRadius: 4, fontSize: 10, fontWeight: 'bold' }}>Mute</button>
+                          <button onClick={() => { sendHostCommand('host-cam-off', p.identity); addToast(`📷 ${p.identity} cam off.`, 'info'); }} style={{ background: 'rgba(245,158,11,0.2)', color: '#f59e0b', border: '1px solid rgba(245,158,11,0.2)', padding: '4px 6px', borderRadius: 4, fontSize: 10, fontWeight: 'bold' }}>Cam</button>
+                          <button onClick={() => sendHostCommand('host-kick', p.identity)} style={{ background: 'rgba(239,68,68,0.2)', color: '#f87171', border: '1px solid rgba(239,68,68,0.2)', padding: '4px 6px', borderRadius: 4, fontSize: 10, fontWeight: 'bold' }}>Kick</button>
+                        </div>
+                      );
+                    })}
+                    {admitted.length === 0 && <div style={{ textAlign: 'center', color: '#6b7280', fontSize: 12, fontStyle: 'italic', padding: 10 }}>Belum ada peserta.</div>}
+                  </>
+                );
+              })()}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Control bar */}
       <div className="control-bar">
@@ -598,6 +764,13 @@ function MeetingView({ myName, bandwidthMode, setBandwidthMode, participantsRef,
           <span dangerouslySetInnerHTML={{ __html: ICONS.chat }} />
           {unreadCount > 0 && <span style={{ position: 'absolute', top: -2, right: -2, background: '#ef4444', color: '#fff', fontSize: 9, fontWeight: 800, width: 18, height: 18, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{unreadCount}</span>}
         </button>
+        
+        {isHost && (
+          <button className={`ctrl-btn ${showHostPanel ? 'active' : ''}`} onClick={() => setShowHostPanel(true)} style={{ position: 'relative' }}>
+            <span style={{ fontSize: 18 }}>👑</span>
+          </button>
+        )}
+
         <button className="ctrl-btn more" onClick={() => setShowMore(!showMore)}>
           <span dangerouslySetInnerHTML={{ __html: ICONS.more }} />
         </button>
@@ -674,6 +847,8 @@ export default function App() {
     }
   }, []);
 
+  const [userEmail, setUserEmail] = useState('');
+
   useEffect(() => {
     setHistory(loadHistory());
     const last = loadLastUser();
@@ -686,6 +861,7 @@ export default function App() {
         const user = JSON.parse(savedAuth);
         if (user.name) setName(user.name);
         if (user.photoURL) setPhotoURL(user.photoURL);
+        if (user.email) setUserEmail(user.email);
       }
     } catch {}
   }, []);
@@ -710,11 +886,14 @@ export default function App() {
       const resp = await fetch(`${API_BASE}/api/token`, { 
         method: 'POST', 
         headers: { 'Content-Type': 'application/json' }, 
-        body: JSON.stringify({ room: actualRoomName, username: name, photoURL }) 
+        body: JSON.stringify({ room: actualRoomName, username: name, photoURL, email: userEmail }) 
       });
       const data = await resp.json();
       if (data.token && data.serverUrl) {
-        setToken(data.token); setServerUrl(data.serverUrl); setJoined(true);
+        setToken(data.token); setServerUrl(data.serverUrl); 
+        if (data.role) setInitialRole(data.role);
+        if (data.status) setInitialStatus(data.status);
+        setJoined(true);
         retryCountRef.current = 0; userLeftRef.current = false;
         meetingStartRef.current = Date.now(); participantsRef.current = new Set();
         saveLastUser(room, name);
@@ -818,7 +997,8 @@ export default function App() {
                       const uName = user.displayName || user.name;
                       setName(uName);
                       setPhotoURL(user.imageUrl);
-                      localStorage.setItem('litemeet_google_auth', JSON.stringify({ name: uName, photoURL: user.imageUrl }));
+                      if (user.email) setUserEmail(user.email);
+                      localStorage.setItem('litemeet_google_auth', JSON.stringify({ name: uName, photoURL: user.imageUrl, email: user.email }));
                     } catch (e) {
                       console.warn('Google Auth Error:', e);
                     }
@@ -966,7 +1146,7 @@ export default function App() {
 
   return (
     <LiveKitRoom key={roomKey} video={true} audio={true} token={token} serverUrl={serverUrl} data-lk-theme="default" style={{ height: '100dvh', background: '#030712' }} onDisconnected={handleDisconnected} options={roomOptions}>
-      <MeetingView myName={name} bandwidthMode={bandwidthMode} setBandwidthMode={setBandwidthMode} participantsRef={participantsRef} saveMeetingToHistory={saveMeetingToHistory} onLeave={() => { userLeftRef.current = true; }} />
+      <MeetingView myName={name} bandwidthMode={bandwidthMode} setBandwidthMode={setBandwidthMode} participantsRef={participantsRef} saveMeetingToHistory={saveMeetingToHistory} onLeave={() => { userLeftRef.current = true; }} initialRole={initialRole} initialStatus={initialStatus} />
       <RoomAudioRenderer />
     </LiveKitRoom>
   );
