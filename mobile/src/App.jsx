@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef, useMemo, createContext, useContext } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo, createContext, useContext, forwardRef } from 'react';
 import { registerPlugin } from '@capacitor/core';
 import { GoogleAuth } from '@codetrix-studio/capacitor-google-auth';
 import { App as CapacitorApp } from '@capacitor/app';
@@ -20,7 +20,7 @@ const ForegroundCall = registerPlugin('ForegroundCall');
 const isAndroid = () => typeof window !== 'undefined' && window.Capacitor?.getPlatform() === 'android';
 
 // ============ CUSTOM PARTICIPANT TILE (Stealth UI + Google Avatar) ============
-function MyParticipantTile({ trackRef, ...props }) {
+const MyParticipantTile = forwardRef(({ trackRef, ...props }, ref) => {
   // Safe import — useMaybeTrackRefContext returns null if no context
   let contextTrackRef = null;
   try {
@@ -57,7 +57,7 @@ function MyParticipantTile({ trackRef, ...props }) {
 
   if (isLocal && (stealthCamOn || stealthMicOn)) {
     return (
-      <div {...props} className={`relative w-full h-full ${props.className || ''}`}>
+      <div ref={ref} {...props} className={`relative w-full h-full ${props.className || ''}`}>
          {stealthCamOn && (
            <div style={{position:'absolute', inset:0, background:'#1f2937', display:'flex', alignItems:'center', justifyContent:'center', zIndex:10}}>
               {photoToShow ? (
@@ -90,7 +90,7 @@ function MyParticipantTile({ trackRef, ...props }) {
   }
 
   return (
-    <div {...props} className={`relative w-full h-full ${hasAvatarOverlay ? 'has-avatar' : ''} ${props.className || ''}`}>
+    <div ref={ref} {...props} className={`relative w-full h-full ${hasAvatarOverlay ? 'has-avatar' : ''} ${props.className || ''}`}>
       <LiveKitParticipantTile trackRef={actualTrackRef} />
       {hasAvatarOverlay && (
         <div style={{
@@ -111,10 +111,10 @@ function MyParticipantTile({ trackRef, ...props }) {
       )}
     </div>
   );
-}
+});
 
 // ============ DRAGGABLE PiP (video kecil pojok) ============
-function DraggablePip({ trackRef, onTap }) {
+function DraggablePip({ trackRef, onTap, isPipMode }) {
   const pipRef = useRef(null);
   const [pos, setPos] = useState({ x: 0, y: 0 });
   const dragRef = useRef({ active: false, startX: 0, startY: 0, origX: 0, origY: 0, moved: false, startTime: 0 });
@@ -142,8 +142,8 @@ function DraggablePip({ trackRef, onTap }) {
 
   const track = trackRef?.publication?.track;
   const isLandscape = track && track.dimensions?.width > track.dimensions?.height;
-  const pipWidth = isLandscape ? 160 : 85;
-  const pipHeight = isLandscape ? 90 : 120;
+  const pipWidth = isPipMode ? (isLandscape ? 50 : 35) : (isLandscape ? 160 : 85);
+  const pipHeight = isPipMode ? (isLandscape ? 28 : 50) : (isLandscape ? 90 : 120);
 
   return (
     <div
@@ -191,7 +191,7 @@ function SmartVideoLayout({ tracks, remoteCount, isPipMode }) {
             : <div className="waiting-room"><div className="waiting-icon">👥</div><p>Menunggu peserta lain bergabung...</p></div>
         }
       </div>
-      {remoteTrackRaw && localTrackRaw && <DraggablePip trackRef={pipTrack} onTap={() => setSwapped(!swapped)} />}
+      {remoteTrackRaw && localTrackRaw && <DraggablePip trackRef={pipTrack} onTap={() => setSwapped(!swapped)} isPipMode={isPipMode} />}
     </div>
   );
 }
@@ -328,6 +328,7 @@ function MeetingView({ myName, myPhotoURL, bandwidthMode, setBandwidthMode, part
     const onData = async (payload, participant, kind, topic) => {
       try {
         const data = JSON.parse(new TextDecoder().decode(payload));
+        if (data.target && data.target !== myName) return; // Only process if targeted at me (or if no target is specified)
         if (data.type === 'admin-kick') {
           addToast('⚠️ Anda telah dikeluarkan oleh admin.', 'error');
           setTimeout(() => leave(), 1500);
@@ -932,6 +933,7 @@ export default function App() {
     // super-apps! (admin vercel) perlu password super-apps!
     
     setLoading(true); setConnectionError('');
+    setInitialRole('participant'); // Reset before fetching
     try {
       const actualRoomName = password ? `${room}___${password}` : room;
       const resp = await fetch(`${API_BASE}/api/token`, { 

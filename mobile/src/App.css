@@ -631,7 +631,8 @@ body {
 }
 
 .pip-active .spotlight-layout,
-.pip-active .video-area {
+.pip-active .video-area,
+.pip-active .lk-grid-layout {
   flex: 1;
 }
 
