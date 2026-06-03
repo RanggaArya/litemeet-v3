@@ -189,7 +189,7 @@ function SmartVideoLayout({ tracks, remoteCount, isPipMode }) {
 
 
 // ===================== MEETING COMPONENT =====================
-function MeetingView({ myName, bandwidthMode, setBandwidthMode, participantsRef, saveMeetingToHistory, onLeave, initialRole, initialStatus }) {
+function MeetingView({ myName, myPhotoURL, bandwidthMode, setBandwidthMode, participantsRef, saveMeetingToHistory, onLeave, initialRole, initialStatus }) {
   const room = useRoomContext();
   const { localParticipant } = useLocalParticipant();
   const remoteParticipants = useRemoteParticipants();
@@ -891,8 +891,7 @@ export default function App() {
           scopes: ['profile', 'email'],
           grantOfflineAccess: true,
         });
-        console.log('GoogleAuth initialized OK');
-      } catch (e) { console.warn('GoogleAuth init error', e); alert('GoogleAuth init gagal: ' + (e.message || JSON.stringify(e))); }
+      } catch (e) { console.warn('GoogleAuth init error', e); }
     }
   }, []);
 
@@ -1229,7 +1228,7 @@ export default function App() {
 
   return (
     <LiveKitRoom key={roomKey} video={true} audio={true} token={token} serverUrl={serverUrl} data-lk-theme="default" style={{ height: '100dvh', background: '#030712' }} onDisconnected={handleDisconnected} options={roomOptions}>
-      <MeetingView myName={name} bandwidthMode={bandwidthMode} setBandwidthMode={setBandwidthMode} participantsRef={participantsRef} saveMeetingToHistory={saveMeetingToHistory} onLeave={() => { userLeftRef.current = true; }} initialRole={initialRole} initialStatus={initialStatus} />
+      <MeetingView myName={name} myPhotoURL={photoURL} bandwidthMode={bandwidthMode} setBandwidthMode={setBandwidthMode} participantsRef={participantsRef} saveMeetingToHistory={saveMeetingToHistory} onLeave={() => { userLeftRef.current = true; }} initialRole={initialRole} initialStatus={initialStatus} />
       <RoomAudioRenderer />
     </LiveKitRoom>
   );

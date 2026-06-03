@@ -13,12 +13,13 @@
     "GoogleAuth": {
       "scopes": ["profile", "email"],
       "serverClientId": "531453224720-1b50s14gvd4dt3curt4r2q4hu2gtt8r0.apps.googleusercontent.com",
-      "forceCodeForRefreshToken": true
+      "forceCodeForRefreshToken": true,
+      "androidClientId": "531453224720-k3gs94ltd0rntvu585rvu1oovotl9b9m.apps.googleusercontent.com"
     }
   },
   "android": {
     "allowMixedContent": true,
     "captureInput": true,
-    "webContentsDebuggingEnabled": false
+    "webContentsDebuggingEnabled": true
   }
 }
