@@ -779,11 +779,6 @@ function MeetingView({ myName, myPhotoURL, bandwidthMode, setBandwidthMode, part
           }}>
             <span className="icon">📶</span><span>{bandwidthMode === 'saver' ? 'Switch ke HD' : bandwidthMode === 'hd' ? 'Switch ke Ultra' : 'Switch ke Hemat'}</span>
           </button>
-          {isHost && !isAdmin && (
-            <button className="more-menu-item" onClick={(e) => { e.stopPropagation(); setShowHostPanel(true); setShowMore(false); }}>
-              <span className="icon">👑</span><span>Host Controls</span>
-            </button>
-          )}
           {isAdmin && (
             <button className="more-menu-item" onClick={(e) => { e.stopPropagation(); setShowAdminRoom(true); setShowMore(false); }}>
               <span className="icon">🔧</span><span>Admin Panel</span>
