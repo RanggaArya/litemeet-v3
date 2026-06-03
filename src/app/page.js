@@ -385,6 +385,14 @@ export default function Home() {
       
       const actualRoomName = password ? `${room}___${password}` : room;
 
+      let localSecret = hostSecretRef.current;
+      if (!localSecret && typeof window !== 'undefined') {
+        try {
+          const savedSecrets = JSON.parse(localStorage.getItem('litemeet_host_secrets') || '{}');
+          localSecret = savedSecrets[actualRoomName] || '';
+        } catch (e) {}
+      }
+
       const resp = await fetch(apiUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -393,7 +401,7 @@ export default function Home() {
           username: name,
           photoURL: photoURL || '',
           email: authEmail || '',
-          hostSecret: hostSecretRef.current || '',
+          hostSecret: localSecret,
         }),
       });
       const data = await resp.json();
@@ -406,6 +414,13 @@ export default function Home() {
         // Store the hostSecret returned by the API so we can reclaim host on reconnect
         if (data.hostSecret) {
           hostSecretRef.current = data.hostSecret;
+          if (typeof window !== 'undefined') {
+            try {
+              const savedSecrets = JSON.parse(localStorage.getItem('litemeet_host_secrets') || '{}');
+              savedSecrets[actualRoomName] = data.hostSecret;
+              localStorage.setItem('litemeet_host_secrets', JSON.stringify(savedSecrets));
+            } catch(e) {}
+          }
         }
         setJoined(true);
         retryCountRef.current = 0;
