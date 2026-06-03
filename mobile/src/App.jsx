@@ -204,11 +204,29 @@ function DraggablePip({ trackRef, onTap, isPipMode }) {
   };
 
   const isLandscape = trackDims ? trackDims.w > trackDims.h : false;
-  // PiP always uses landscape-oriented container to fit both 16:9 and portrait well
-  // Portrait video: 130 wide x 170 tall (portrait oriented)
-  // Landscape video: 200 wide x 112 tall (landscape oriented)
-  const pipWidth = isPipMode ? 50 : (isLandscape ? 200 : 130);
-  const pipHeight = isPipMode ? 35 : (isLandscape ? 112 : 170);
+  // Calculate exact aspect ratio to prevent cropping.
+  // Standard portrait is 9:16 (e.g., 96x170). Standard landscape is 16:9 (e.g., 200x112).
+  let pipWidth = 100;
+  let pipHeight = 177; // Default 9:16 for mobile portrait
+
+  if (trackDims && trackDims.w && trackDims.h) {
+    const ratio = trackDims.w / trackDims.h;
+    if (isLandscape) {
+      pipWidth = 200;
+      pipHeight = Math.round(200 / ratio);
+    } else {
+      pipHeight = 170;
+      pipWidth = Math.round(170 * ratio);
+    }
+  } else {
+    pipWidth = isLandscape ? 200 : 96;
+    pipHeight = isLandscape ? 112 : 170;
+  }
+
+  if (isPipMode) {
+    pipWidth = isLandscape ? 50 : 35;
+    pipHeight = isLandscape ? 28 : 50;
+  }
 
   return (
     <div
@@ -235,12 +253,33 @@ function SmartVideoLayout({ tracks, remoteCount, isPipMode }) {
   const [swapped, setSwapped] = useState(false);
   const totalPeople = remoteCount + 1;
 
-  // For 3+ people: Use LiveKit's default GridLayout for a clean layout
+  // For 3+ people: Custom 2-column grid instead of LiveKit's default GridLayout 
+  // because LiveKit's GridLayout automatically creates a paginated carousel (1 of 2) on small mobile screens.
   if (totalPeople >= 3) {
+    const cols = 2;
+    const rows = Math.ceil(tracks.length / cols);
     return (
-      <GridLayout tracks={tracks} style={{ width: '100%', height: '100%' }}>
-        <MyParticipantTile />
-      </GridLayout>
+      <div style={{
+        width: '100%', height: '100%', display: 'grid',
+        gridTemplateColumns: 'repeat(2, 1fr)',
+        gridTemplateRows: `repeat(${rows}, 1fr)`,
+        gap: 2, background: '#000',
+        alignContent: 'center',
+      }}>
+        {tracks.map((track, i) => {
+          // If odd number and last item, span 2 columns
+          const isLastOdd = tracks.length % 2 !== 0 && i === tracks.length - 1;
+          return (
+            <div key={track.participant?.sid || i} style={{
+              position: 'relative', width: '100%', height: '100%',
+              minHeight: 0, borderRadius: 6, overflow: 'hidden', background: '#111827',
+              gridColumn: isLastOdd ? '1 / -1' : 'auto',
+            }}>
+              <MyParticipantTile trackRef={track} />
+            </div>
+          );
+        })}
+      </div>
     );
   }
 

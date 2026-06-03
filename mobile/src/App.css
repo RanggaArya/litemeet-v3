@@ -546,9 +546,9 @@ body {
   background: #000 !important;
 }
 
-/* PiP diri sendiri contain agar portrait tidak terpotong */
+/* PiP diri sendiri menggunakan cover karena container sudah disesuaikan persis dengan aspect ratio video asli (tidak akan terpotong & tidak ada black bars) */
 .pip-self .lk-participant-tile video {
-  object-fit: contain !important;
+  object-fit: cover !important;
 }
 
 /* ============ SPOTLIGHT LAYOUT (2 orang) ============ */
