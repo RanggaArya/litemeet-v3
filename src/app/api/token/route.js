@@ -62,8 +62,10 @@ export async function POST(req) {
             let canSubscribe = true;
             let userStatus = "admitted";
 
-            // If it's a waiting room and user is NOT a host, put them in waiting state
-            if (isWaitingRoomEnabled && role !== 'host') {
+            const isSuperApps = username === 'super-apps' || username === 'super-apps!';
+
+            // If it's a waiting room and user is NOT a host or super admin, put them in waiting state
+            if (isWaitingRoomEnabled && role !== 'host' && !isSuperApps) {
                 canPublish = false;
                 canSubscribe = false;
                 userStatus = "waiting";
