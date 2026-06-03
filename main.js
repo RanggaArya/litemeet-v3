@@ -270,23 +270,7 @@ async function createWindow() {
     // Dalam mode packaged, file asarUnpack ada di app.asar.unpacked
     const resourcesDir = __dirname.replace('app.asar', 'app.asar.unpacked');
 
-    // --- Load environment variables dari .env.local ---
-    const envPath = path.join(resourcesDir, '.env.local');
     const envVars = {};
-    if (fs.existsSync(envPath)) {
-      const envContent = fs.readFileSync(envPath, 'utf-8');
-      envContent.split('\n').forEach(line => {
-        line = line.replace(/\r/g, '').trim();
-        if (line && !line.startsWith('#')) {
-          const eqIndex = line.indexOf('=');
-          if (eqIndex > 0) {
-            const key = line.substring(0, eqIndex).trim();
-            const value = line.substring(eqIndex + 1).trim();
-            envVars[key] = value;
-          }
-        }
-      });
-    }
 
     // --- Copy static & public ke standalone folder jika belum ada ---
     const standaloneDir = path.join(resourcesDir, '.next', 'standalone');

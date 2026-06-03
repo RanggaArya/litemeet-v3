@@ -24,14 +24,12 @@
       "public/**/*",
       "main.js",
       "preload.js",
-      "package.json",
-      ".env.local"
+      "package.json"
     ],
     "asarUnpack": [
       ".next/standalone/**/*",
       ".next/static/**/*",
-      "public/**/*",
-      ".env.local"
+      "public/**/*"
     ],
     "win": {
       "icon": "public/icon.png",
