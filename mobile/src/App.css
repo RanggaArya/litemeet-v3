@@ -540,15 +540,15 @@ body {
   gap: 4px !important;
 }
 
-/* FIX: video tidak terpotong/zoom — pakai contain bukan cover */
+/* Video fills container — cover not contain to avoid black bars */
 .lk-participant-tile video {
-  object-fit: contain !important;
+  object-fit: cover !important;
   background: #000 !important;
 }
 
-/* Khusus PiP diri sendiri (pojok kecil) pakai contain agar tidak terpotong (zoom) sesuai request */
+/* PiP diri sendiri juga cover agar tidak ada black bars */
 .pip-self .lk-participant-tile video {
-  object-fit: contain !important;
+  object-fit: cover !important;
 }
 
 /* ============ SPOTLIGHT LAYOUT (2 orang) ============ */

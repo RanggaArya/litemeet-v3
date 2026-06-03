@@ -142,8 +142,8 @@ function DraggablePip({ trackRef, onTap, isPipMode }) {
 
   const track = trackRef?.publication?.track;
   const isLandscape = track && track.dimensions?.width > track.dimensions?.height;
-  const pipWidth = isPipMode ? (isLandscape ? 50 : 35) : (isLandscape ? 160 : 85);
-  const pipHeight = isPipMode ? (isLandscape ? 28 : 50) : (isLandscape ? 90 : 120);
+  const pipWidth = isPipMode ? (isLandscape ? 50 : 35) : (isLandscape ? 200 : 120);
+  const pipHeight = isPipMode ? (isLandscape ? 28 : 50) : (isLandscape ? 112 : 170);
 
   return (
     <div
@@ -164,30 +164,25 @@ function DraggablePip({ trackRef, onTap, isPipMode }) {
 }
 
 // ============ SMART VIDEO LAYOUT ============
-// Custom mobile-optimized grid - NOT using LiveKit's GridLayout
+// Custom mobile-optimized layout
 function SmartVideoLayout({ tracks, remoteCount, isPipMode }) {
   const { localParticipant } = useLocalParticipant();
   const [swapped, setSwapped] = useState(false);
   const totalPeople = remoteCount + 1;
 
-  // For 3+ people: custom CSS grid layout centered vertically
+  // For 3+ people: stacked rows, each video gets equal height
   if (totalPeople >= 3) {
-    // Calculate grid dimensions
-    const cols = totalPeople <= 4 ? 2 : 2;
-    const rows = Math.ceil(tracks.length / cols);
     return (
       <div style={{
-        width: '100%', height: '100%', display: 'grid',
-        gridTemplateColumns: `repeat(${cols}, 1fr)`,
-        gridTemplateRows: `repeat(${rows}, 1fr)`,
-        gap: '2px', padding: '2px',
-        background: '#000',
-        alignContent: 'center',
+        width: '100%', height: '100%', display: 'flex',
+        flexDirection: 'column', gap: 2,
+        background: '#000', justifyContent: 'center',
       }}>
         {tracks.map((track, i) => (
           <div key={track.participant?.sid || i} style={{
-            position: 'relative', width: '100%', height: '100%',
-            minHeight: 0, borderRadius: 8, overflow: 'hidden', background: '#111827',
+            position: 'relative', width: '100%',
+            flex: '1 1 0', minHeight: 0,
+            borderRadius: 6, overflow: 'hidden', background: '#111827',
           }}>
             <MyParticipantTile trackRef={track} />
           </div>
@@ -227,6 +222,8 @@ function MeetingView({ myName, myPhotoURL, bandwidthMode, setBandwidthMode, part
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [chatInput, setChatInput] = useState('');
   const [unreadCount, setUnreadCount] = useState(0);
+  const [dmTarget, setDmTarget] = useState('everyone'); // 'everyone' or participant identity
+  const [dmMessages, setDmMessages] = useState([]); // received DMs
   const [toasts, setToasts] = useState([]);
   const [showMore, setShowMore] = useState(false);
   const [meetingStart] = useState(Date.now());
@@ -376,7 +373,11 @@ function MeetingView({ myName, myPhotoURL, bandwidthMode, setBandwidthMode, part
         } else if (data.type === 'dm-chat') {
           const senderName = data.senderName || participant?.identity || '???';
           const dmMsg = data.message || '';
-          addToast(`💬 DM dari ${senderName}: ${dmMsg.length > 50 ? dmMsg.slice(0, 50) + '...' : dmMsg}`, 'success');
+          setDmMessages(prev => [...prev, { from: senderName, to: myName, message: dmMsg, timestamp: data.timestamp || Date.now() }]);
+          if (!isChatOpen) {
+            setUnreadCount(prev => prev + 1);
+          }
+          addToast(`💬 DM dari ${senderName}: ${dmMsg.length > 30 ? dmMsg.slice(0, 30) + '...' : dmMsg}`, 'success');
         }
       } catch {}
     };
@@ -530,7 +531,17 @@ function MeetingView({ myName, myPhotoURL, bandwidthMode, setBandwidthMode, part
 
   const sendChat = () => {
     if (!chatInput.trim()) return;
-    send(chatInput.trim()); setChatInput('');
+    if (dmTarget === 'everyone') {
+      send(chatInput.trim());
+    } else {
+      // Send DM via data channel to specific user
+      const payload = JSON.stringify({ type: 'dm-chat', message: chatInput.trim(), senderName: myName });
+      const encoded = new TextEncoder().encode(payload);
+      localParticipant.publishData(encoded, { reliable: true, destinationIdentities: [dmTarget] }).catch(() => {});
+      // Add to local DM messages for display
+      setDmMessages(prev => [...prev, { from: myName, to: dmTarget, message: chatInput.trim(), timestamp: Date.now() }]);
+    }
+    setChatInput('');
   };
 
   const [bwStats, setBwStats] = useState({ upload: 0, download: 0 });
@@ -861,20 +872,47 @@ function MeetingView({ myName, myPhotoURL, bandwidthMode, setBandwidthMode, part
             <span style={{ fontWeight: 700, fontSize: 16 }}>💬 Chat</span>
             <button onClick={() => setIsChatOpen(false)} style={{ background: 'none', border: 'none', color: '#9ca3af', fontSize: 24, cursor: 'pointer' }}>✕</button>
           </div>
+          {/* DM target selector */}
+          <div style={{ padding: '6px 16px', borderBottom: '1px solid rgba(255,255,255,0.08)', display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span style={{ fontSize: 11, color: '#6b7280', flexShrink: 0 }}>Kirim ke:</span>
+            <select
+              value={dmTarget}
+              onChange={e => setDmTarget(e.target.value)}
+              style={{ flex: 1, background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 8, padding: '6px 10px', color: '#fff', fontSize: 12, outline: 'none', fontFamily: 'inherit' }}
+            >
+              <option value="everyone" style={{ background: '#1f2937' }}>👥 Semua</option>
+              {remoteParticipants.filter(p => !isSuperAdmin(p.identity)).map(p => (
+                <option key={p.identity} value={p.identity} style={{ background: '#1f2937' }}>💬 {p.identity}</option>
+              ))}
+            </select>
+          </div>
           <div className="chat-messages">
-            {chatMessages.map((m, i) => (
-              <div key={i} style={{ marginBottom: 12, textAlign: m.from?.identity === myName ? 'right' : 'left' }}>
-                <div style={{ fontSize: 10, color: '#6b7280', marginBottom: 2 }}>{m.from?.identity || '???'}</div>
-                <div style={{ display: 'inline-block', padding: '8px 12px', borderRadius: 12, background: m.from?.identity === myName ? '#4f46e5' : 'rgba(255,255,255,0.1)', color: '#fff', fontSize: 13, maxWidth: '80%', wordBreak: 'break-word' }}>
-                  {m.message}
+            {dmTarget === 'everyone' ? (
+              // Public chat messages
+              chatMessages.map((m, i) => (
+                <div key={i} style={{ marginBottom: 12, textAlign: m.from?.identity === myName ? 'right' : 'left' }}>
+                  <div style={{ fontSize: 10, color: '#6b7280', marginBottom: 2 }}>{m.from?.identity || '???'}</div>
+                  <div style={{ display: 'inline-block', padding: '8px 12px', borderRadius: 12, background: m.from?.identity === myName ? '#4f46e5' : 'rgba(255,255,255,0.1)', color: '#fff', fontSize: 13, maxWidth: '80%', wordBreak: 'break-word' }}>
+                    {m.message}
+                  </div>
                 </div>
-              </div>
-            ))}
+              ))
+            ) : (
+              // DM messages filtered for selected target
+              dmMessages.filter(dm => (dm.from === myName && dm.to === dmTarget) || (dm.from === dmTarget && dm.to === myName)).map((dm, i) => (
+                <div key={i} style={{ marginBottom: 12, textAlign: dm.from === myName ? 'right' : 'left' }}>
+                  <div style={{ fontSize: 10, color: '#a78bfa', marginBottom: 2 }}>{dm.from === myName ? 'Kamu' : dm.from} • DM</div>
+                  <div style={{ display: 'inline-block', padding: '8px 12px', borderRadius: 12, background: dm.from === myName ? '#7c3aed' : 'rgba(139,92,246,0.2)', color: '#fff', fontSize: 13, maxWidth: '80%', wordBreak: 'break-word', border: '1px solid rgba(139,92,246,0.3)' }}>
+                    {dm.message}
+                  </div>
+                </div>
+              ))
+            )}
             <div ref={chatEndRef} />
           </div>
           <div className="chat-input-area">
-            <input className="chat-input" value={chatInput} onChange={e => setChatInput(e.target.value)} onKeyDown={e => e.key === 'Enter' && sendChat()} placeholder="Ketik pesan..." />
-            <button className="chat-send-btn" onClick={sendChat}>Kirim</button>
+            <input className="chat-input" value={chatInput} onChange={e => setChatInput(e.target.value)} onKeyDown={e => e.key === 'Enter' && sendChat()} placeholder={dmTarget === 'everyone' ? 'Ketik pesan...' : `DM ke ${dmTarget}...`} />
+            <button className="chat-send-btn" onClick={sendChat} style={dmTarget !== 'everyone' ? { background: '#7c3aed' } : {}}>Kirim</button>
           </div>
         </div>
       )}
