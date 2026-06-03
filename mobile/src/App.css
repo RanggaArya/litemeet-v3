@@ -632,6 +632,15 @@ body {
   flex: 1;
 }
 
+.pip-active .pip-self {
+  width: 50px;
+  height: 75px;
+  top: 8px;
+  right: 8px;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.4);
+}
+
 
 
 .lk-participant-tile {

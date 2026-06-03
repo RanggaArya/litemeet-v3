@@ -182,7 +182,7 @@ function SmartVideoLayout({ tracks, remoteCount, isPipMode }) {
             : <div className="waiting-room"><div className="waiting-icon">👥</div><p>Menunggu peserta lain bergabung...</p></div>
         }
       </div>
-      {!isPipMode && remoteTrackRaw && localTrackRaw && <DraggablePip trackRef={pipTrack} onTap={() => setSwapped(!swapped)} />}
+      {remoteTrackRaw && localTrackRaw && <DraggablePip trackRef={pipTrack} onTap={() => setSwapped(!swapped)} />}
     </div>
   );
 }
