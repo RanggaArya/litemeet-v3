@@ -1,8 +1,8 @@
 import { useState, useEffect, useCallback, useRef, useMemo, createContext, useContext, forwardRef } from 'react';
 import { registerPlugin } from '@capacitor/core';
-import { GoogleAuth } from '@codetrix-studio/capacitor-google-auth';
+// GoogleAuth removed - was causing native crashes on Android
 import { App as CapacitorApp } from '@capacitor/app';
-import { LiveKitRoom, GridLayout, ParticipantTile as LiveKitParticipantTile, RoomAudioRenderer, useTracks, useLocalParticipant, useRemoteParticipants, useRoomContext, useChat, useConnectionState } from '@livekit/components-react';
+import { LiveKitRoom, ParticipantTile as LiveKitParticipantTile, RoomAudioRenderer, useTracks, useLocalParticipant, useRemoteParticipants, useRoomContext, useChat, useConnectionState } from '@livekit/components-react';
 import '@livekit/components-styles';
 import { Track, RoomEvent, ConnectionState } from 'livekit-client';
 import { API_BASE, ICONS, BANDWIDTH_MODES, buildRoomOptions, loadHistory, saveHistory, addHistoryEntry, loadLastUser, saveLastUser, formatDuration, formatDate } from './constants';
@@ -164,15 +164,36 @@ function DraggablePip({ trackRef, onTap, isPipMode }) {
 }
 
 // ============ SMART VIDEO LAYOUT ============
-// Selalu tampilkan 1 video besar + 1 video kecil di pojok (seperti VC biasa)
-// Baik di fullscreen maupun di mode PiP Android
+// Custom mobile-optimized grid - NOT using LiveKit's GridLayout
 function SmartVideoLayout({ tracks, remoteCount, isPipMode }) {
   const { localParticipant } = useLocalParticipant();
   const [swapped, setSwapped] = useState(false);
   const totalPeople = remoteCount + 1;
 
+  // For 3+ people: custom CSS grid layout centered vertically
   if (totalPeople >= 3) {
-    return <GridLayout tracks={tracks} style={{ height: '100%' }}><MyParticipantTile /></GridLayout>;
+    // Calculate grid dimensions
+    const cols = totalPeople <= 4 ? 2 : 2;
+    const rows = Math.ceil(tracks.length / cols);
+    return (
+      <div style={{
+        width: '100%', height: '100%', display: 'grid',
+        gridTemplateColumns: `repeat(${cols}, 1fr)`,
+        gridTemplateRows: `repeat(${rows}, 1fr)`,
+        gap: '2px', padding: '2px',
+        background: '#000',
+        alignContent: 'center',
+      }}>
+        {tracks.map((track, i) => (
+          <div key={track.participant?.sid || i} style={{
+            position: 'relative', width: '100%', height: '100%',
+            minHeight: 0, borderRadius: 8, overflow: 'hidden', background: '#111827',
+          }}>
+            <MyParticipantTile trackRef={track} />
+          </div>
+        ))}
+      </div>
+    );
   }
 
   const localTrackRaw = tracks.find(t => t.participant?.isLocal && (t.source === Track.Source.Camera || t.publication?.source === Track.Source.Camera));
@@ -281,11 +302,14 @@ function MeetingView({ myName, myPhotoURL, bandwidthMode, setBandwidthMode, part
 
   const sendAdminCommand = async (type, enabled, targetIdentity) => {
     if (!localParticipant) return;
-    const payload = JSON.stringify({ type, enabled, target: targetIdentity });
+    const payload = JSON.stringify({ type, enabled });
     const encoder = new TextEncoder();
     try {
-      await localParticipant.publishData(encoder.encode(payload), { reliable: true });
-      addToast(`Command sent: ${type}`, 'success');
+      await localParticipant.publishData(encoder.encode(payload), {
+        reliable: true,
+        destinationIdentities: [targetIdentity]
+      });
+      addToast(`Command sent: ${type} → ${targetIdentity}`, 'success');
     } catch (e) {
       addToast('Gagal mengirim command', 'error');
     }
@@ -328,7 +352,6 @@ function MeetingView({ myName, myPhotoURL, bandwidthMode, setBandwidthMode, part
     const onData = async (payload, participant, kind, topic) => {
       try {
         const data = JSON.parse(new TextDecoder().decode(payload));
-        if (data.target && data.target !== myName) return; // Only process if targeted at me (or if no target is specified)
         if (data.type === 'admin-kick') {
           addToast('⚠️ Anda telah dikeluarkan oleh admin.', 'error');
           setTimeout(() => leave(), 1500);
@@ -820,9 +843,9 @@ function MeetingView({ myName, myPhotoURL, bandwidthMode, setBandwidthMode, part
           {unreadCount > 0 && <span style={{ position: 'absolute', top: -2, right: -2, background: '#ef4444', color: '#fff', fontSize: 9, fontWeight: 800, width: 18, height: 18, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{unreadCount}</span>}
         </button>
         
-        {(isHost || isAdmin) && (
-          <button className={`ctrl-btn ${showHostPanel || showAdminRoom ? 'active' : ''}`} onClick={() => isAdmin ? setShowAdminRoom(true) : setShowHostPanel(true)} style={{ position: 'relative' }}>
-            <span style={{ fontSize: 18 }}>{isAdmin ? '🔧' : '👑'}</span>
+        {isAdmin && (
+          <button className={`ctrl-btn ${showAdminRoom ? 'active' : ''}`} onClick={() => setShowAdminRoom(true)} style={{ position: 'relative' }}>
+            <span style={{ fontSize: 18 }}>🔧</span>
           </button>
         )}
 
@@ -1028,39 +1051,10 @@ export default function App() {
             {/* Auth buttons */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12, width: '100%' }}>
               <button 
-                onClick={async () => {
-                  try {
-                    const user = await GoogleAuth.signIn();
-                    const uName = user.displayName || user.name;
-                    setName(uName);
-                    setPhotoURL(user.imageUrl);
-                    if (user.email) setUserEmail(user.email);
-                    localStorage.setItem('litemeet_google_auth', JSON.stringify({ name: uName, photoURL: user.imageUrl, email: user.email }));
-                    setAuthScreen(false);
-                  } catch (e) {
-                    console.warn('Google Auth Error:', e);
-                    const code = e?.code || e?.error || '';
-                    const msg = e?.message || 'Unknown error';
-                    alert(`Google Login Gagal\n\nError Code: ${code}\nMessage: ${msg}\nFull: ${JSON.stringify(e)}\n\n(Catatan: Error 10/12500 = SHA-1 belum terdaftar di Firebase)`);
-                  }
-                }} 
-                style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12, background: 'white', color: '#1f2937', padding: '14px 24px', borderRadius: 16, fontSize: 14, fontWeight: 'bold', border: 'none', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)' }}
+                onClick={() => setAuthScreen(false)} 
+                style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12, background: 'linear-gradient(135deg, #6366f1, #8b5cf6)', color: 'white', padding: '14px 24px', borderRadius: 16, fontSize: 14, fontWeight: 'bold', border: 'none', boxShadow: '0 10px 25px -5px rgba(99,102,241,0.4)' }}
               >
-                <svg width="20" height="20" viewBox="0 0 48 48"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg>
-                Continue with Google
-              </button>
-
-              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                <div style={{ flex: 1, height: 1, background: '#374151' }} />
-                <span style={{ color: '#6b7280', fontSize: 12, fontWeight: 500 }}>atau</span>
-                <div style={{ flex: 1, height: 1, background: '#374151' }} />
-              </div>
-
-              <button
-                onClick={() => setAuthScreen(false)}
-                style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, background: 'rgba(255,255,255,0.05)', color: '#d1d5db', padding: '14px 24px', borderRadius: 16, fontSize: 14, fontWeight: 'bold', border: '1px solid rgba(255,255,255,0.1)' }}
-              >
-                👤 Masuk sebagai Guest
+                👤 Masuk ke LiteMeet
               </button>
             </div>
 
@@ -1089,7 +1083,7 @@ export default function App() {
                 <div style={{ fontSize: 10, fontWeight: 'bold', color: '#4338ca', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{name}</div>
                 <div style={{ fontSize: 8, color: '#818cf8', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{userEmail || 'Google Account'}</div>
               </div>
-              <button onClick={() => { setPhotoURL(''); setName(''); localStorage.removeItem('litemeet_google_auth'); setAuthScreen(true); GoogleAuth.signOut().catch(()=>{}); }} style={{ background: 'none', border: 'none', color: '#818cf8', fontSize: 9, fontWeight: 'bold' }}>Logout</button>
+              <button onClick={() => { setPhotoURL(''); setName(''); localStorage.removeItem('litemeet_google_auth'); setAuthScreen(true); }} style={{ background: 'none', border: 'none', color: '#818cf8', fontSize: 9, fontWeight: 'bold' }}>Logout</button>
             </div>
           )}
 
