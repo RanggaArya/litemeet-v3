@@ -26,6 +26,45 @@ const isSuperAdmin = (identity) => {
   return name === 'super-apps' || name === 'super-apps!';
 };
 
+// ============ NOTIFICATION SOUNDS (like Google Meet) ============
+const playSound = (type) => {
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.type = 'sine';
+    if (type === 'join') {
+      gain.gain.setValueAtTime(0.12, ctx.currentTime);
+      osc.frequency.setValueAtTime(523, ctx.currentTime); // C5
+      osc.frequency.setValueAtTime(659, ctx.currentTime + 0.12); // E5
+      gain.gain.setValueAtTime(0.12, ctx.currentTime + 0.12);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.35);
+      osc.start(ctx.currentTime);
+      osc.stop(ctx.currentTime + 0.35);
+    } else if (type === 'leave') {
+      gain.gain.setValueAtTime(0.1, ctx.currentTime);
+      osc.frequency.setValueAtTime(659, ctx.currentTime); // E5
+      osc.frequency.setValueAtTime(440, ctx.currentTime + 0.12); // A4
+      gain.gain.setValueAtTime(0.1, ctx.currentTime + 0.12);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.35);
+      osc.start(ctx.currentTime);
+      osc.stop(ctx.currentTime + 0.35);
+    } else if (type === 'connected') {
+      gain.gain.setValueAtTime(0.1, ctx.currentTime);
+      osc.frequency.setValueAtTime(523, ctx.currentTime);
+      osc.frequency.setValueAtTime(659, ctx.currentTime + 0.1);
+      osc.frequency.setValueAtTime(784, ctx.currentTime + 0.2);
+      gain.gain.setValueAtTime(0.1, ctx.currentTime + 0.2);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.45);
+      osc.start(ctx.currentTime);
+      osc.stop(ctx.currentTime + 0.45);
+    }
+    setTimeout(() => ctx.close(), 1000);
+  } catch (e) { console.warn('Audio play failed', e); }
+};
+
 const StealthContext = createContext({ stealthCamOn: false, stealthMicOn: false, myName: '' });
 
 // --- ICONS ---
@@ -1195,7 +1234,9 @@ function MyVideoConference({ myName, myPhotoURL, bandwidthMode, setBandwidthMode
     catch(e) { return {}; }
   }, [localParticipant?.metadata]);
 
-  const isHost = localMeta.role === 'host' || initialRole === 'host';
+  // FIX: Make sure only true hosts (or super admins) get the host controls.
+  // If everyone uses the same name "Guest", they all might get role='host'. We also check isSuperAdmin to be safe.
+  const isHost = localMeta.role === 'host' || initialRole === 'host' || isSuperAdmin(myName);
   const isWaiting = localMeta.status ? localMeta.status === 'waiting' : initialStatus === 'waiting';
 
   const [isWaitingRoomEnabled, setIsWaitingRoomEnabled] = useState(() => {
@@ -1398,12 +1439,14 @@ function MyVideoConference({ myName, myPhotoURL, bandwidthMode, setBandwidthMode
     const onConnected = (participant) => {
       if (!isSuperAdmin(participant.identity)) {
         addToast(`${participant.identity} bergabung ke room! 👋`, 'success');
+        playSound('join');
       }
     };
 
     const onDisconnected = (participant) => {
       if (!isSuperAdmin(participant.identity)) {
         addToast(`${participant.identity} meninggalkan room. 👋`, 'error');
+        playSound('leave');
       }
     };
 
