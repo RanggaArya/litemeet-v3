@@ -57,7 +57,7 @@ function MyParticipantTile({ trackRef, ...props }) {
 
   if (isLocal && (stealthCamOn || stealthMicOn)) {
     return (
-      <div className="relative w-full h-full" {...props}>
+      <div {...props} className={`relative w-full h-full ${props.className || ''}`}>
          {stealthCamOn && (
            <div style={{position:'absolute', inset:0, background:'#1f2937', display:'flex', alignItems:'center', justifyContent:'center', zIndex:10}}>
               {photoToShow ? (
@@ -90,7 +90,7 @@ function MyParticipantTile({ trackRef, ...props }) {
   }
 
   return (
-    <div className={`relative w-full h-full${hasAvatarOverlay ? ' has-avatar' : ''}`} {...props}>
+    <div {...props} className={`relative w-full h-full ${hasAvatarOverlay ? 'has-avatar' : ''} ${props.className || ''}`}>
       <LiveKitParticipantTile trackRef={actualTrackRef} />
       {hasAvatarOverlay && (
         <div style={{
@@ -140,11 +140,20 @@ function DraggablePip({ trackRef, onTap }) {
     dragRef.current.active = false; 
   };
 
+  const track = trackRef?.publication?.track;
+  const isLandscape = track && track.dimensions?.width > track.dimensions?.height;
+  const pipWidth = isLandscape ? 160 : 85;
+  const pipHeight = isLandscape ? 90 : 120;
+
   return (
     <div
       ref={pipRef}
       className="pip-self"
-      style={{ transform: `translate(${pos.x}px, ${pos.y}px)` }}
+      style={{ 
+        transform: `translate(${pos.x}px, ${pos.y}px)`,
+        width: `${pipWidth}px`,
+        height: `${pipHeight}px`
+      }}
       onTouchStart={onTouchStart}
       onTouchMove={onTouchMove}
       onTouchEnd={onTouchEnd}
@@ -885,13 +894,6 @@ export default function App() {
   useEffect(() => {
     if (isAndroid()) {
       ForegroundCall.requestPermissions().catch(e => console.warn('Permission init:', e));
-      try {
-        GoogleAuth.initialize({
-          clientId: '531453224720-1b50s14gvd4dt3curt4r2q4hu2gtt8r0.apps.googleusercontent.com',
-          scopes: ['profile', 'email'],
-          grantOfflineAccess: true,
-        });
-      } catch (e) { console.warn('GoogleAuth init error', e); }
     }
   }, []);
 
