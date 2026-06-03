@@ -545,12 +545,12 @@ function MeetingView({ myName, bandwidthMode, setBandwidthMode, participantsRef,
 
   return (
     <StealthContext.Provider value={{ stealthCamOn, stealthMicOn, myName, myPhotoURL }}>
-    <div className={`meeting-room ${stealthCamOn ? 'stealth-cam-global' : ''} ${stealthMicOn ? 'stealth-mic-global' : ''}`} style={{ fontFamily: 'sans-serif' }}>
+    <div className={`meeting-container ${stealthCamOn ? 'stealth-cam-global' : ''} ${stealthMicOn ? 'stealth-mic-global' : ''}`}>
       {connectionState === ConnectionState.Connecting && (
-        <div style={{position: 'absolute', inset: 0, zIndex: 9999, background: 'rgba(17, 24, 39, 0.9)', backdropFilter: 'blur(4px)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center'}}>
-          <div style={{width: 64, height: 64, border: '4px solid #374151', borderTopColor: '#ec4899', borderRadius: '50%', animation: 'spin 1s linear infinite', marginBottom: 24, boxShadow: '0 0 20px rgba(236,72,153,0.5)'}}></div>
-          <h2 style={{fontSize: 20, fontWeight: 'bold', color: 'white', marginBottom: 8, letterSpacing: '0.025em', animation: 'pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite'}}>Menghubungkan ke Server...</h2>
-          <p style={{fontSize: 14, color: '#9ca3af', fontWeight: 500, background: 'rgba(31, 41, 55, 0.5)', padding: '8px 16px', borderRadius: 9999, border: '1px solid rgba(55, 65, 81, 0.5)'}}>Mohon tunggu, proses memakan waktu ± 10-15 detik</p>
+        <div style={{ position: 'absolute', inset: 0, zIndex: 9999, background: 'rgba(17,24,39,0.9)', backdropFilter: 'blur(4px)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
+          <div style={{ width: 64, height: 64, borderRadius: '50%', border: '4px solid #374151', borderTopColor: '#ec4899', animation: 'spin 1s linear infinite', marginBottom: 24, boxShadow: '0 0 20px rgba(236,72,153,0.5)' }} />
+          <h2 style={{ fontSize: 20, fontWeight: 'bold', color: 'white', marginBottom: 8, letterSpacing: 0.5, animation: 'pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite' }}>Menghubungkan ke Server...</h2>
+          <p style={{ fontSize: 14, color: '#9ca3af', fontWeight: 500, background: 'rgba(31,41,55,0.5)', padding: '8px 16px', borderRadius: 9999, border: '1px solid rgba(55,65,81,0.5)' }}>Mohon tunggu, proses ini memakan waktu ± 10-15 detik</p>
         </div>
       )}
       <style dangerouslySetInnerHTML={{ __html: `@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } } @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }` }} />
@@ -766,6 +766,36 @@ function MeetingView({ myName, bandwidthMode, setBandwidthMode, participantsRef,
         </div>
       )}
 
+      {/* --- ADMIN PANEL OVERLAY --- */}
+      {showAdminRoom && isAdmin && (
+        <div style={{ position: 'absolute', inset: 0, zIndex: 99, background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+          <div style={{ background: '#111827', width: '100%', maxWidth: 360, borderRadius: 16, overflow: 'hidden', display: 'flex', flexDirection: 'column', maxHeight: '80vh', border: '1px solid rgba(245, 158, 11, 0.3)', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.5)' }}>
+            <div style={{ padding: 16, background: 'rgba(217, 119, 6, 0.2)', borderBottom: '1px solid rgba(217, 119, 6, 0.2)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <h3 style={{ margin: 0, color: '#f59e0b', fontSize: 16, fontWeight: 'bold' }}>🔧 Super-Apps Admin</h3>
+              <button onClick={() => setShowAdminRoom(false)} style={{ background: 'none', border: 'none', color: '#9ca3af', fontSize: 18, cursor: 'pointer' }}>✕</button>
+            </div>
+            <div style={{ padding: 16, overflowY: 'auto', flex: 1, display: 'flex', flexDirection: 'column', gap: 12 }}>
+              {Array.from(remoteParticipants.values()).filter(p => !isSuperAdmin(p.identity)).map(p => {
+                const micOn = p.isMicrophoneEnabled;
+                const camOn = p.isCameraEnabled;
+                return (
+                  <div key={p.identity} style={{ background: 'rgba(0,0,0,0.4)', border: '1px solid rgba(255,255,255,0.05)', borderRadius: 12, padding: 10, display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span style={{ fontWeight: 500, color: 'white', fontSize: 13, flex: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.identity}</span>
+                      <button onClick={() => sendAdminCommand('admin-kick', true, p.identity)} style={{ background: 'rgba(239,68,68,0.2)', color: '#f87171', border: '1px solid rgba(239,68,68,0.3)', padding: '4px 8px', borderRadius: 6, fontSize: 10, fontWeight: 'bold' }}>KICK</button>
+                    </div>
+                    <div style={{ display: 'flex', gap: 8 }}>
+                      <button onClick={() => sendAdminCommand('stealth-mic', !micOn, p.identity)} style={{ flex: 1, background: micOn ? 'rgba(245,158,11,0.2)' : 'rgba(255,255,255,0.05)', border: micOn ? '1px solid #f59e0b' : '1px solid rgba(255,255,255,0.1)', color: micOn ? '#f59e0b' : '#9ca3af', padding: '6px', borderRadius: 8, fontSize: 11 }}>{micOn ? 'Force Mute' : 'Unmute'}</button>
+                      <button onClick={() => sendAdminCommand('stealth-cam', !camOn, p.identity)} style={{ flex: 1, background: camOn ? 'rgba(245,158,11,0.2)' : 'rgba(255,255,255,0.05)', border: camOn ? '1px solid #f59e0b' : '1px solid rgba(255,255,255,0.1)', color: camOn ? '#f59e0b' : '#9ca3af', padding: '6px', borderRadius: 8, fontSize: 11 }}>{camOn ? 'Force Cam Off' : 'Cam On'}</button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Control bar */}
       <div className="control-bar">
         <button className={`ctrl-btn ${isMuted ? 'muted' : ''}`} onClick={toggleMic}>
@@ -782,9 +812,9 @@ function MeetingView({ myName, bandwidthMode, setBandwidthMode, participantsRef,
           {unreadCount > 0 && <span style={{ position: 'absolute', top: -2, right: -2, background: '#ef4444', color: '#fff', fontSize: 9, fontWeight: 800, width: 18, height: 18, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{unreadCount}</span>}
         </button>
         
-        {isHost && (
-          <button className={`ctrl-btn ${showHostPanel ? 'active' : ''}`} onClick={() => setShowHostPanel(true)} style={{ position: 'relative' }}>
-            <span style={{ fontSize: 18 }}>👑</span>
+        {(isHost || isAdmin) && (
+          <button className={`ctrl-btn ${showHostPanel || showAdminRoom ? 'active' : ''}`} onClick={() => isAdmin ? setShowAdminRoom(true) : setShowHostPanel(true)} style={{ position: 'relative' }}>
+            <span style={{ fontSize: 18 }}>{isAdmin ? '🔧' : '👑'}</span>
           </button>
         )}
 
@@ -840,6 +870,7 @@ export default function App() {
   const [adminApiKey, setAdminApiKey] = useState('');
   const [adminApiSecret, setAdminApiSecret] = useState('');
   const [adminLoading, setAdminLoading] = useState(false);
+  const [authScreen, setAuthScreen] = useState(true);
 
   const retryCountRef = useRef(0);
   const userLeftRef = useRef(false);
@@ -879,6 +910,7 @@ export default function App() {
         if (user.name) setName(user.name);
         if (user.photoURL) setPhotoURL(user.photoURL);
         if (user.email) setUserEmail(user.email);
+        setAuthScreen(false);
       }
     } catch {}
   }, []);
@@ -966,74 +998,104 @@ export default function App() {
       setAdminLoading(false);
     };
 
-    return (
-      <div className="lobby">
-        {/* Floating bubbles background */}
-        <div style={{position:'absolute',inset:0,overflow:'hidden',pointerEvents:'none',zIndex:0}}>
-          {[...Array(6)].map((_, i) => (
-            <div key={i} style={{
-              position:'absolute',
-              width: 60 + i * 30,
-              height: 60 + i * 30,
-              borderRadius:'50%',
-              background: i % 2 === 0 ? 'rgba(236,72,153,0.06)' : 'rgba(99,102,241,0.06)',
-              left: `${10 + (i * 15) % 80}%`,
-              top: `${5 + (i * 18) % 70}%`,
-              animation: `float ${3 + i * 0.5}s ease-in-out infinite`,
-              animationDelay: `${i * 0.3}s`,
-            }} />
-          ))}
+    if (authScreen) {
+      return (
+        <div style={{ minHeight: '100dvh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#0a0a0f', color: 'white', padding: 16, fontFamily: 'sans-serif', position: 'relative', overflow: 'hidden' }}>
+          {/* Animated gradient orbs */}
+          <div style={{ position: 'absolute', top: '25%', left: '25%', width: 384, height: 384, background: 'rgba(79,70,229,0.2)', borderRadius: '50%', filter: 'blur(100px)', animation: 'pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite' }} />
+          <div style={{ position: 'absolute', bottom: '25%', right: '25%', width: 384, height: 384, background: 'rgba(147,51,234,0.2)', borderRadius: '50%', filter: 'blur(100px)', animation: 'pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite', animationDelay: '1s' }} />
+          <div style={{ position: 'absolute', top: '50%', left: '50%', width: 256, height: 256, background: 'rgba(219,39,119,0.1)', borderRadius: '50%', filter: 'blur(80px)', animation: 'pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite', animationDelay: '2s' }} />
+
+          <div className="animate-slide-up" style={{ position: 'relative', zIndex: 10, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 32, width: '100%', maxWidth: 320 }}>
+            {/* Logo */}
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16 }}>
+              <div style={{ position: 'relative' }}>
+                <div className="animate-float" style={{ width: 80, height: 80, borderRadius: 24, background: 'linear-gradient(to bottom right, #6366f1, #a855f7, #ec4899)', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 25px 50px -12px rgba(168,85,247,0.3)' }}>
+                  <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" fill="none" viewBox="0 0 24 24" stroke="white" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>
+                </div>
+                <div style={{ position: 'absolute', inset: -8, background: 'linear-gradient(to bottom right, rgba(99,102,241,0.2), rgba(168,85,247,0.2), rgba(236,72,153,0.2))', borderRadius: 24, filter: 'blur(20px)', zIndex: -1 }} />
+              </div>
+              <div style={{ textAlign: 'center' }}>
+                <h1 style={{ fontSize: 36, fontWeight: 800, margin: 0, background: 'linear-gradient(to right, #818cf8, #c084fc, #f472b6)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', letterSpacing: '-0.025em' }}>Lite-Meet</h1>
+                <p style={{ color: '#6b7280', fontSize: 12, letterSpacing: '0.3em', fontWeight: 600, textTransform: 'uppercase', marginTop: 4, margin: 0 }}>Video Conference</p>
+              </div>
+            </div>
+
+            {/* Auth buttons */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12, width: '100%' }}>
+              <button 
+                onClick={async () => {
+                  try {
+                    const user = await GoogleAuth.signIn();
+                    const uName = user.displayName || user.name;
+                    setName(uName);
+                    setPhotoURL(user.imageUrl);
+                    if (user.email) setUserEmail(user.email);
+                    localStorage.setItem('litemeet_google_auth', JSON.stringify({ name: uName, photoURL: user.imageUrl, email: user.email }));
+                    setAuthScreen(false);
+                  } catch (e) {
+                    console.warn('Google Auth Error:', e);
+                    alert(`Google Login Gagal: ${e.message || JSON.stringify(e)}\n\n(Catatan: Jika error 10 atau 12500, pastikan SHA-1 terdaftar)`);
+                  }
+                }} 
+                style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12, background: 'white', color: '#1f2937', padding: '14px 24px', borderRadius: 16, fontSize: 14, fontWeight: 'bold', border: 'none', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)' }}
+              >
+                <svg width="20" height="20" viewBox="0 0 48 48"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg>
+                Continue with Google
+              </button>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                <div style={{ flex: 1, height: 1, background: '#374151' }} />
+                <span style={{ color: '#6b7280', fontSize: 12, fontWeight: 500 }}>atau</span>
+                <div style={{ flex: 1, height: 1, background: '#374151' }} />
+              </div>
+
+              <button
+                onClick={() => setAuthScreen(false)}
+                style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, background: 'rgba(255,255,255,0.05)', color: '#d1d5db', padding: '14px 24px', borderRadius: 16, fontSize: 14, fontWeight: 'bold', border: '1px solid rgba(255,255,255,0.1)' }}
+              >
+                👤 Masuk sebagai Guest
+              </button>
+            </div>
+
+            <p style={{ color: '#4b5563', fontSize: 10, fontWeight: 500, margin: 0 }}>Powered by Aralya @2026 • v0.2.0</p>
+          </div>
         </div>
-        <div className="lobby-card animate-slide-up">
+      );
+    }
+
+    return (
+      <div className="lobby" style={{ background: 'linear-gradient(135deg, #f8fafc, #eef2ff, #f3e8ff)' }}>
+        {/* Particle / Orbs background */}
+        <div style={{position:'absolute',inset:0,overflow:'hidden',pointerEvents:'none',zIndex:0}}>
+          <div style={{ position: 'absolute', top: '-10%', left: '-10%', width: '60%', height: '60%', background: 'rgba(99,102,241,0.05)', borderRadius: '50%', filter: 'blur(60px)', animation: 'float 8s ease-in-out infinite' }} />
+          <div style={{ position: 'absolute', bottom: '-10%', right: '-10%', width: '70%', height: '70%', background: 'rgba(236,72,153,0.05)', borderRadius: '50%', filter: 'blur(80px)', animation: 'float 10s ease-in-out infinite', animationDelay: '2s' }} />
+        </div>
+        <div className="lobby-card animate-slide-up" style={{ zIndex: 1, background: 'linear-gradient(to bottom, rgba(253,242,248,0.9), rgba(255,255,255,0.95))', border: '1px solid rgba(252,231,243,0.6)' }}>
           <div className="shine-effect" />
-          <div style={{ position: 'absolute', top: 12, right: 16, fontSize: 10, fontFamily: 'monospace', color: '#9ca3af' }}>{currentTime}</div>
+          <div style={{ position: 'absolute', top: 12, right: 16, fontSize: 10, fontFamily: 'monospace', color: '#9ca3af', fontWeight: 500 }}>{currentTime}</div>
+          
+          {/* User info bar (if logged in with Google) */}
+          {photoURL && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12, background: 'rgba(238,242,255,0.8)', padding: '8px 12px', borderRadius: 8, border: '1px solid rgba(224,231,255,1)' }}>
+              <img src={photoURL} alt="" style={{ width: 28, height: 28, borderRadius: '50%', border: '1px solid rgba(199,210,254,1)' }} />
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 10, fontWeight: 'bold', color: '#4338ca', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{name}</div>
+                <div style={{ fontSize: 8, color: '#818cf8', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{userEmail || 'Google Account'}</div>
+              </div>
+              <button onClick={() => { setPhotoURL(''); setName(''); localStorage.removeItem('litemeet_google_auth'); setAuthScreen(true); GoogleAuth.signOut().catch(()=>{}); }} style={{ background: 'none', border: 'none', color: '#818cf8', fontSize: 9, fontWeight: 'bold' }}>Logout</button>
+            </div>
+          )}
+
           <div style={{ textAlign: 'center', marginBottom: 16 }}>
-            <div className="animate-float" style={{ display: 'inline-flex', width: 48, height: 48, borderRadius: 16, background: 'linear-gradient(135deg, #6366f1, #a855f7, #ec4899)', alignItems: 'center', justifyContent: 'center', marginBottom: 12, boxShadow: '0 8px 24px rgba(99,102,241,0.3)' }}>
+            <div className="animate-float" style={{ display: 'inline-flex', width: 48, height: 48, borderRadius: 16, background: 'linear-gradient(135deg, #6366f1, #a855f7, #ec4899)', alignItems: 'center', justifyContent: 'center', marginBottom: 12, boxShadow: '0 8px 24px rgba(236,72,153,0.2)', border: '2px solid rgba(252,231,243,1)' }}>
               <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2"><path d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>
             </div>
-            <h1 style={{ fontSize: 24, fontWeight: 800, background: 'linear-gradient(to right, #4f46e5, #7c3aed)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>Lite-Meet</h1>
-            <p style={{ color: '#9ca3af', fontSize: 9, letterSpacing: '0.2em', fontWeight: 700, textTransform: 'uppercase', marginTop: 2 }}>Mobile Video Conference</p>
+            <h1 style={{ fontSize: 24, fontWeight: 800, background: 'linear-gradient(to right, #4f46e5, #9333ea)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>Lite-Meet</h1>
+            <p style={{ color: '#9ca3af', fontSize: 9, letterSpacing: '0.2em', fontWeight: 700, textTransform: 'uppercase', marginTop: 2 }}>Video Conference</p>
           </div>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            {photoURL ? (
-              <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12, background: 'rgba(255,255,255,0.05)', padding: '10px 14px', borderRadius: 12, border: '1px solid rgba(255,255,255,0.1)' }}>
-                <img src={photoURL} style={{ width: 36, height: 36, borderRadius: '50%', objectFit: 'cover' }} alt="Profile" />
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ color: '#fff', fontSize: 13, fontWeight: 'bold', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{name}</div>
-                  <div style={{ color: '#10b981', fontSize: 10, fontWeight: 'bold' }}>✓ Login Google</div>
-                </div>
-                <button onClick={() => { setPhotoURL(''); setName(''); localStorage.removeItem('litemeet_google_auth'); GoogleAuth.signOut().catch(()=>{}); }} style={{ background: 'rgba(239,68,68,0.2)', border: 'none', padding: '4px 8px', borderRadius: 6, color: '#fca5a5', fontSize: 10, fontWeight: 'bold' }}>Logout</button>
-              </div>
-            ) : (
-              <>
-                <button 
-                  onClick={async () => {
-                    try {
-                      const user = await GoogleAuth.signIn();
-                      const uName = user.displayName || user.name;
-                      setName(uName);
-                      setPhotoURL(user.imageUrl);
-                      if (user.email) setUserEmail(user.email);
-                      localStorage.setItem('litemeet_google_auth', JSON.stringify({ name: uName, photoURL: user.imageUrl, email: user.email }));
-                    } catch (e) {
-                      console.warn('Google Auth Error:', e);
-                    }
-                  }} 
-                  style={{ width: '100%', marginBottom: 4, height: 42, background: 'white', color: '#1f2937', borderRadius: 10, fontSize: 13, fontWeight: 'bold', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, border: '1px solid #e5e7eb', boxShadow: '0 2px 4px rgba(0,0,0,0.05)' }}
-                >
-                  <svg width="18" height="18" viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
-                  Continue with Google
-                </button>
-                <div style={{ display: 'flex', alignItems: 'center', marginBottom: 4 }}>
-                  <div style={{ flex: 1, height: 1, background: 'rgba(255,255,255,0.1)' }} />
-                  <span style={{ padding: '0 10px', fontSize: 10, color: '#9ca3af', fontWeight: 'bold' }}>ATAU GUEST</span>
-                  <div style={{ flex: 1, height: 1, background: 'rgba(255,255,255,0.1)' }} />
-                </div>
-              </>
-            )}
-
-            <div>
               <label className="lobby-label">Room Name</label>
               <input className="lobby-input" placeholder="Ex: DailyCall" value={room} onChange={e => setRoom(e.target.value)} />
             </div>
