@@ -26,17 +26,20 @@ export async function POST(req) {
 
             case 'update-participant-meta': {
                 // Update participant metadata
-                await svc.updateParticipant(room, participantIdentity, undefined, metadata);
+                await svc.updateParticipant(room, participantIdentity, { metadata });
                 return NextResponse.json({ success: true });
             }
 
             case 'admit-participant': {
                 // Change status from waiting to admitted and grant permissions
                 const newMetadata = JSON.stringify({ ...JSON.parse(metadata || '{}'), status: 'admitted' });
-                await svc.updateParticipant(room, participantIdentity, undefined, newMetadata, {
-                    canPublish: true,
-                    canSubscribe: true,
-                    canPublishData: true,
+                await svc.updateParticipant(room, participantIdentity, {
+                    metadata: newMetadata,
+                    permission: {
+                        canPublish: true,
+                        canSubscribe: true,
+                        canPublishData: true,
+                    },
                 });
                 return NextResponse.json({ success: true, message: `${participantIdentity} diizinkan masuk.` });
             }

@@ -16,21 +16,41 @@ const StealthContext = createContext({ stealthCamOn: false, stealthMicOn: false,
 const ForegroundCall = registerPlugin('ForegroundCall');
 const isAndroid = () => typeof window !== 'undefined' && window.Capacitor?.getPlatform() === 'android';
 
-// ============ CUSTOM PARTICIPANT TILE (Stealth UI) ============
+// ============ CUSTOM PARTICIPANT TILE (Stealth UI + Google Avatar) ============
 function MyParticipantTile({ trackRef, ...props }) {
-  // Safe import — useTrackContext may not exist in all @livekit/components-react versions
+  // Safe import — useMaybeTrackRefContext returns null if no context
   let contextTrackRef = null;
   try {
     const lkComponents = require('@livekit/components-react');
-    if (lkComponents.useTrackContext) {
-      contextTrackRef = lkComponents.useTrackContext();
+    if (lkComponents.useMaybeTrackRefContext) {
+      contextTrackRef = lkComponents.useMaybeTrackRefContext();
     }
   } catch (e) { /* ignore */ }
   const actualTrackRef = trackRef || contextTrackRef;
   const participant = actualTrackRef?.participant;
   const isLocal = participant?.isLocal;
   
-  const { stealthCamOn, stealthMicOn, myName } = useContext(StealthContext);
+  const { stealthCamOn, stealthMicOn, myName, myPhotoURL } = useContext(StealthContext);
+
+  // Get participant's photo from metadata
+  const participantPhoto = useMemo(() => {
+    try {
+      const meta = JSON.parse(participant?.metadata || '{}');
+      return meta.photoURL || '';
+    } catch { return ''; }
+  }, [participant?.metadata]);
+
+  // Check if camera is muted
+  let isCameraMuted = false;
+  try {
+    const lkComponents = require('@livekit/components-react');
+    if (lkComponents.useIsMuted) {
+      isCameraMuted = lkComponents.useIsMuted(Track.Source.Camera, { participant });
+    }
+  } catch (e) { /* ignore */ }
+
+  const photoToShow = (isLocal && stealthCamOn) ? (myPhotoURL || '') : participantPhoto;
+  const hasAvatarOverlay = isCameraMuted && photoToShow && !(isLocal && stealthCamOn);
 
   if (isLocal && (stealthCamOn || stealthMicOn)) {
     return (
@@ -59,7 +79,28 @@ function MyParticipantTile({ trackRef, ...props }) {
     );
   }
 
-  return <LiveKitParticipantTile trackRef={actualTrackRef} {...props} />;
+  return (
+    <div className={`relative w-full h-full${hasAvatarOverlay ? ' has-avatar' : ''}`} {...props}>
+      <LiveKitParticipantTile trackRef={actualTrackRef} />
+      {hasAvatarOverlay && (
+        <div style={{
+          position: 'absolute', inset: 0, display: 'flex',
+          alignItems: 'center', justifyContent: 'center',
+          pointerEvents: 'none', zIndex: 2,
+          backgroundColor: 'var(--lk-bg2, #1e1e1e)', borderRadius: 'inherit',
+        }}>
+          <img src={photoToShow} alt="" referrerPolicy="no-referrer"
+            style={{
+              width: 'min(40%, 160px)', aspectRatio: '1', minWidth: '80px',
+              borderRadius: '50%', objectFit: 'cover',
+              border: '4px solid rgba(55,65,81,0.5)',
+              boxShadow: '0 25px 50px -12px rgba(0,0,0,0.25)',
+            }}
+          />
+        </div>
+      )}
+    </div>
+  );
 }
 
 // ============ DRAGGABLE PiP (video kecil pojok) ============
@@ -412,7 +453,7 @@ function MeetingView({ myName, bandwidthMode, setBandwidthMode, participantsRef,
   // Saat PiP mode: sembunyikan semua UI, hanya tampilkan video
   if (isPipMode) {
     return (
-      <StealthContext.Provider value={{ stealthCamOn, stealthMicOn, myName }}>
+      <StealthContext.Provider value={{ stealthCamOn, stealthMicOn, myName, myPhotoURL }}>
         <div className="meeting-room pip-active">
           <SmartVideoLayout tracks={allTracks} remoteCount={filteredRemoteParticipants.length} isPipMode={true} />
         </div>
@@ -421,7 +462,7 @@ function MeetingView({ myName, bandwidthMode, setBandwidthMode, participantsRef,
   }
 
   return (
-    <StealthContext.Provider value={{ stealthCamOn, stealthMicOn, myName }}>
+    <StealthContext.Provider value={{ stealthCamOn, stealthMicOn, myName, myPhotoURL }}>
     <div className={`meeting-room ${stealthCamOn ? 'stealth-cam-global' : ''} ${stealthMicOn ? 'stealth-mic-global' : ''}`} style={{ fontFamily: 'sans-serif' }}>
       {connectionState === ConnectionState.Connecting && (
         <div style={{position: 'absolute', inset: 0, zIndex: 9999, background: 'rgba(17, 24, 39, 0.9)', backdropFilter: 'blur(4px)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center'}}>
