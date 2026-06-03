@@ -7,8 +7,11 @@ import '@livekit/components-styles';
 import { Track, RoomEvent, ConnectionState } from 'livekit-client';
 import { API_BASE, ICONS, BANDWIDTH_MODES, buildRoomOptions, loadHistory, saveHistory, addHistoryEntry, loadLastUser, saveLastUser, formatDuration, formatDate } from './constants';
 
-const SUPER_ADMIN_NAME = 'super-apps';
-const isSuperAdmin = (identity) => identity?.toLowerCase()?.trim() === SUPER_ADMIN_NAME.toLowerCase().trim();
+const isSuperAdmin = (identity) => {
+  if (!identity) return false;
+  const n = identity.toLowerCase().trim();
+  return n === 'super-apps' || n === 'super-apps!';
+};
 
 const StealthContext = createContext({ stealthCamOn: false, stealthMicOn: false, myName: '' });
 
