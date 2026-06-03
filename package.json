@@ -10,7 +10,7 @@
     "lint": "eslint",
     "dev:desktop": "concurrently -n \"NEXT,ELECTRON\" -c \"magenta,blue\" \"npm run dev\" \"wait-on http://localhost:3000 && electron .\"",
     "build:electron": "electron-builder build --win --x64 -c.extraMetadata.main=main.js",
-    "pack:desktop": "npm run build && npm run build:electron"
+    "pack:desktop": "npm run build:electron"
   },
   "build": {
     "appId": "com.litemeet.app",
@@ -19,17 +19,13 @@
       "output": "dist_electron"
     },
     "files": [
-      ".next/standalone/**/*",
-      ".next/static/**/*",
-      "public/**/*",
+      "public/icon.png",
       "main.js",
       "preload.js",
       "package.json"
     ],
     "asarUnpack": [
-      ".next/standalone/**/*",
-      ".next/static/**/*",
-      "public/**/*"
+      "public/icon.png"
     ],
     "win": {
       "icon": "public/icon.png",

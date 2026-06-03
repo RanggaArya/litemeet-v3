@@ -267,91 +267,13 @@ async function createWindow() {
     mainWindow.loadURL('http://localhost:3000');
     mainWindow.webContents.openDevTools();
   } else {
-    // Dalam mode packaged, file asarUnpack ada di app.asar.unpacked
-    const resourcesDir = __dirname.replace('app.asar', 'app.asar.unpacked');
-
-    const envVars = {};
-
-    // --- Copy static & public ke standalone folder jika belum ada ---
-    const standaloneDir = path.join(resourcesDir, '.next', 'standalone');
-    const staticSrc = path.join(resourcesDir, '.next', 'static');
-    const staticDest = path.join(standaloneDir, '.next', 'static');
-    const publicSrc = path.join(resourcesDir, 'public');
-    const publicDest = path.join(standaloneDir, 'public');
-
-    // Copy fungsi rekursif
-    function copyDirSync(src, dest) {
-      if (!fs.existsSync(src)) return;
-      if (!fs.existsSync(dest)) fs.mkdirSync(dest, { recursive: true });
-      const entries = fs.readdirSync(src, { withFileTypes: true });
-      for (const entry of entries) {
-        const srcPath = path.join(src, entry.name);
-        const destPath = path.join(dest, entry.name);
-        if (entry.isDirectory()) {
-          copyDirSync(srcPath, destPath);
-        } else {
-          fs.copyFileSync(srcPath, destPath);
-        }
-      }
-    }
-
-    if (!fs.existsSync(staticDest)) {
-      console.log('Copying .next/static to standalone...');
-      copyDirSync(staticSrc, staticDest);
-    }
-    if (!fs.existsSync(publicDest)) {
-      console.log('Copying public to standalone...');
-      copyDirSync(publicSrc, publicDest);
-    }
-
-    // Jalankan bundled Next.js standalone server via fork
-    const serverPath = path.join(standaloneDir, 'server.js');
-    console.log('Starting Next.js server from:', serverPath);
-    console.log('Standalone dir:', standaloneDir);
-
-    // Gunakan fork dengan ELECTRON_RUN_AS_NODE=1 agar Electron bertindak sebagai Node.js
-    const { fork } = require('child_process');
-    nextProcess = fork(serverPath, [], {
-      env: {
-        ...process.env,
-        ...envVars,
-        PORT: '3000',
-        HOSTNAME: 'localhost',
-        NODE_ENV: 'production',
-        ELECTRON_RUN_AS_NODE: '1'
-      },
-      cwd: standaloneDir,
-      stdio: ['pipe', 'pipe', 'pipe', 'ipc']
-    });
-
-    nextProcess.stdout.on('data', data => console.log(`NextJS: ${data}`));
-    nextProcess.stderr.on('data', data => console.error(`NextJS Error: ${data}`));
-    nextProcess.on('error', err => console.error('Fork error:', err));
-    nextProcess.on('exit', (code) => console.log('Next.js server exited with code:', code));
-
-    const checkServerReady = async (url) => {
-      for (let i = 0; i < 30; i++) {
-        try {
-          const isReady = await new Promise((resolve) => {
-            const req = require('http').get(url, (res) => {
-              if (res.statusCode === 200) resolve(true);
-              else resolve(false);
-            });
-            req.on('error', () => resolve(false));
-          });
-          if (isReady) return true;
-        } catch (e) {}
-        await new Promise(r => setTimeout(r, 1000));
-      }
-      return false;
-    };
-
-    checkServerReady('http://localhost:3000').then(ready => {
-      if (!ready) {
-        console.error('Next.js server failed to start!');
-      }
-      mainWindow.loadURL('http://localhost:3000');
-    });
+    // Production/packaged mode: load directly from Vercel deployment.
+    // This is more reliable than running a local Next.js standalone server
+    // because the standalone server requires environment variables (LIVEKIT keys, etc.)
+    // that are not bundled into the Electron package.
+    const PRODUCTION_URL = 'https://litemeet-v3.vercel.app';
+    console.log('Loading production URL:', PRODUCTION_URL);
+    mainWindow.loadURL(PRODUCTION_URL);
   }
 
   // Show main window and close splash when page is ready
