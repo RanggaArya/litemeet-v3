@@ -316,7 +316,7 @@ async function createWindow() {
         ...process.env,
         ...envVars,
         PORT: '3000',
-        HOSTNAME: '127.0.0.1',
+        HOSTNAME: 'localhost',
         NODE_ENV: 'production',
         ELECTRON_RUN_AS_NODE: '1'
       },
@@ -346,11 +346,11 @@ async function createWindow() {
       return false;
     };
 
-    checkServerReady('http://127.0.0.1:3000').then(ready => {
+    checkServerReady('http://localhost:3000').then(ready => {
       if (!ready) {
         console.error('Next.js server failed to start!');
       }
-      mainWindow.loadURL('http://127.0.0.1:3000');
+      mainWindow.loadURL('http://localhost:3000');
     });
   }
 
@@ -463,10 +463,7 @@ async function createWindow() {
       pipTimeout = null;
     }
 
-    // If currently in PiP mode and user clicks on it, restore to normal
-    if (isPipMode && inMeeting) {
-      exitPipMode();
-    }
+    // Do not restore on focus so the user can drag the window via the title bar without it resizing.
   });
 
   // --- MINIMIZE: Different behavior depending on current state ---
