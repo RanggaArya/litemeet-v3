@@ -540,9 +540,9 @@ body {
   gap: 4px !important;
 }
 
-/* Video fills container — cover not contain to avoid black bars */
+/* Default: contain so grid videos show fully without cropping */
 .lk-participant-tile video {
-  object-fit: cover !important;
+  object-fit: contain !important;
   background: #000 !important;
 }
 

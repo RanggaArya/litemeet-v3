@@ -19,6 +19,48 @@ const StealthContext = createContext({ stealthCamOn: false, stealthMicOn: false,
 const ForegroundCall = registerPlugin('ForegroundCall');
 const isAndroid = () => typeof window !== 'undefined' && window.Capacitor?.getPlatform() === 'android';
 
+// ============ NOTIFICATION SOUNDS (like Google Meet) ============
+const playSound = (type) => {
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.type = 'sine';
+    if (type === 'join') {
+      // Ascending two-tone (do-mi)
+      gain.gain.setValueAtTime(0.12, ctx.currentTime);
+      osc.frequency.setValueAtTime(523, ctx.currentTime); // C5
+      osc.frequency.setValueAtTime(659, ctx.currentTime + 0.12); // E5
+      gain.gain.setValueAtTime(0.12, ctx.currentTime + 0.12);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.35);
+      osc.start(ctx.currentTime);
+      osc.stop(ctx.currentTime + 0.35);
+    } else if (type === 'leave') {
+      // Descending two-tone (mi-do)
+      gain.gain.setValueAtTime(0.1, ctx.currentTime);
+      osc.frequency.setValueAtTime(659, ctx.currentTime); // E5
+      osc.frequency.setValueAtTime(440, ctx.currentTime + 0.12); // A4
+      gain.gain.setValueAtTime(0.1, ctx.currentTime + 0.12);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.35);
+      osc.start(ctx.currentTime);
+      osc.stop(ctx.currentTime + 0.35);
+    } else if (type === 'connected') {
+      // Three ascending tones (do-mi-sol)
+      gain.gain.setValueAtTime(0.1, ctx.currentTime);
+      osc.frequency.setValueAtTime(523, ctx.currentTime);     // C5
+      osc.frequency.setValueAtTime(659, ctx.currentTime + 0.1);  // E5
+      osc.frequency.setValueAtTime(784, ctx.currentTime + 0.2);  // G5
+      gain.gain.setValueAtTime(0.1, ctx.currentTime + 0.2);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.45);
+      osc.start(ctx.currentTime);
+      osc.stop(ctx.currentTime + 0.45);
+    }
+    setTimeout(() => ctx.close(), 1000);
+  } catch (e) {}
+};
+
 // ============ CUSTOM PARTICIPANT TILE (Stealth UI + Google Avatar) ============
 const MyParticipantTile = forwardRef(({ trackRef, ...props }, ref) => {
   // Safe import — useMaybeTrackRefContext returns null if no context
@@ -118,6 +160,28 @@ function DraggablePip({ trackRef, onTap, isPipMode }) {
   const pipRef = useRef(null);
   const [pos, setPos] = useState({ x: 0, y: 0 });
   const dragRef = useRef({ active: false, startX: 0, startY: 0, origX: 0, origY: 0, moved: false, startTime: 0 });
+  const [trackDims, setTrackDims] = useState(null);
+
+  // Listen for track dimension changes to detect landscape/portrait
+  useEffect(() => {
+    const track = trackRef?.publication?.track;
+    if (!track) return;
+    const updateDims = () => {
+      if (track.dimensions?.width && track.dimensions?.height) {
+        setTrackDims({ w: track.dimensions.width, h: track.dimensions.height });
+      }
+    };
+    updateDims();
+    // Also try from mediaStreamTrack settings
+    if (!trackDims && track.mediaStreamTrack) {
+      const settings = track.mediaStreamTrack.getSettings();
+      if (settings.width && settings.height) {
+        setTrackDims({ w: settings.width, h: settings.height });
+      }
+    }
+    const iv = setInterval(updateDims, 1000); // Poll every second until we get dims
+    return () => clearInterval(iv);
+  }, [trackRef?.publication?.track]);
 
   const onTouchStart = (e) => {
     const t = e.touches[0];
@@ -133,17 +197,18 @@ function DraggablePip({ trackRef, onTap, isPipMode }) {
     setPos({ x: dragRef.current.origX + (t.clientX - dragRef.current.startX), y: dragRef.current.origY + (t.clientY - dragRef.current.startY) });
   };
   const onTouchEnd = () => { 
-    // Tap = sentuh tanpa geser dan kurang dari 300ms
     if (dragRef.current.active && !dragRef.current.moved && (Date.now() - dragRef.current.startTime) < 300) {
       if (onTap) onTap();
     }
     dragRef.current.active = false; 
   };
 
-  const track = trackRef?.publication?.track;
-  const isLandscape = track && track.dimensions?.width > track.dimensions?.height;
-  const pipWidth = isPipMode ? (isLandscape ? 50 : 35) : (isLandscape ? 200 : 120);
-  const pipHeight = isPipMode ? (isLandscape ? 28 : 50) : (isLandscape ? 112 : 170);
+  const isLandscape = trackDims ? trackDims.w > trackDims.h : false;
+  // PiP always uses landscape-oriented container to fit both 16:9 and portrait well
+  // Portrait video: 130 wide x 170 tall (portrait oriented)
+  // Landscape video: 200 wide x 112 tall (landscape oriented)
+  const pipWidth = isPipMode ? 50 : (isLandscape ? 200 : 130);
+  const pipHeight = isPipMode ? 35 : (isLandscape ? 112 : 170);
 
   return (
     <div
@@ -170,23 +235,31 @@ function SmartVideoLayout({ tracks, remoteCount, isPipMode }) {
   const [swapped, setSwapped] = useState(false);
   const totalPeople = remoteCount + 1;
 
-  // For 3+ people: stacked rows, each video gets equal height
+  // For 3+ people: 2-column grid for better space usage on mobile portrait
   if (totalPeople >= 3) {
+    const cols = 2;
+    const rows = Math.ceil(tracks.length / cols);
     return (
       <div style={{
-        width: '100%', height: '100%', display: 'flex',
-        flexDirection: 'column', gap: 2,
-        background: '#000', justifyContent: 'center',
+        width: '100%', height: '100%', display: 'grid',
+        gridTemplateColumns: 'repeat(2, 1fr)',
+        gridTemplateRows: `repeat(${rows}, 1fr)`,
+        gap: 2, background: '#000',
+        alignContent: 'center',
       }}>
-        {tracks.map((track, i) => (
-          <div key={track.participant?.sid || i} style={{
-            position: 'relative', width: '100%',
-            flex: '1 1 0', minHeight: 0,
-            borderRadius: 6, overflow: 'hidden', background: '#111827',
-          }}>
-            <MyParticipantTile trackRef={track} />
-          </div>
-        ))}
+        {tracks.map((track, i) => {
+          // If odd number and last item, span 2 columns
+          const isLastOdd = tracks.length % 2 !== 0 && i === tracks.length - 1;
+          return (
+            <div key={track.participant?.sid || i} style={{
+              position: 'relative', width: '100%', height: '100%',
+              minHeight: 0, borderRadius: 6, overflow: 'hidden', background: '#111827',
+              gridColumn: isLastOdd ? '1 / -1' : 'auto',
+            }}>
+              <MyParticipantTile trackRef={track} />
+            </div>
+          );
+        })}
       </div>
     );
   }
@@ -241,6 +314,15 @@ function MeetingView({ myName, myPhotoURL, bandwidthMode, setBandwidthMode, part
   const recordedChunksRef = useRef([]);
   const recordingTimerRef = useRef(null);
   const chatEndRef = useRef(null);
+  const prevConnectionRef = useRef(null);
+
+  // Play sound when connected
+  useEffect(() => {
+    if (connectionState === ConnectionState.Connected && prevConnectionRef.current !== ConnectionState.Connected) {
+      playSound('connected');
+    }
+    prevConnectionRef.current = connectionState;
+  }, [connectionState]);
 
   // Parse local metadata
   let localMeta = {};
@@ -344,8 +426,8 @@ function MeetingView({ myName, myPhotoURL, bandwidthMode, setBandwidthMode, part
   // Notifications & Admin Commands
   useEffect(() => {
     if (!room) return;
-    const onJoin = (p) => { if (!isSuperAdmin(p.identity)) addToast(`${p.identity} bergabung 👋`); };
-    const onLeft = (p) => { if (!isSuperAdmin(p.identity)) addToast(`${p.identity} keluar 👋`, 'error'); };
+    const onJoin = (p) => { if (!isSuperAdmin(p.identity)) { playSound('join'); addToast(`${p.identity} bergabung 👋`); } };
+    const onLeft = (p) => { if (!isSuperAdmin(p.identity)) { playSound('leave'); addToast(`${p.identity} keluar 👋`, 'error'); } };
     const onData = async (payload, participant, kind, topic) => {
       try {
         const data = JSON.parse(new TextDecoder().decode(payload));
