@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef, useMemo, createContext, useCo
 import { registerPlugin } from '@capacitor/core';
 // GoogleAuth removed - was causing native crashes on Android
 import { App as CapacitorApp } from '@capacitor/app';
-import { LiveKitRoom, ParticipantTile as LiveKitParticipantTile, RoomAudioRenderer, useTracks, useLocalParticipant, useRemoteParticipants, useRoomContext, useChat, useConnectionState } from '@livekit/components-react';
+import { LiveKitRoom, ParticipantTile as LiveKitParticipantTile, RoomAudioRenderer, useTracks, useLocalParticipant, useRemoteParticipants, useRoomContext, useChat, useConnectionState, GridLayout } from '@livekit/components-react';
 import '@livekit/components-styles';
 import { Track, RoomEvent, ConnectionState } from 'livekit-client';
 import { API_BASE, ICONS, BANDWIDTH_MODES, buildRoomOptions, loadHistory, saveHistory, addHistoryEntry, loadLastUser, saveLastUser, formatDuration, formatDate } from './constants';
@@ -235,32 +235,12 @@ function SmartVideoLayout({ tracks, remoteCount, isPipMode }) {
   const [swapped, setSwapped] = useState(false);
   const totalPeople = remoteCount + 1;
 
-  // For 3+ people: 2-column grid for better space usage on mobile portrait
+  // For 3+ people: Use LiveKit's default GridLayout for a clean layout
   if (totalPeople >= 3) {
-    const cols = 2;
-    const rows = Math.ceil(tracks.length / cols);
     return (
-      <div style={{
-        width: '100%', height: '100%', display: 'grid',
-        gridTemplateColumns: 'repeat(2, 1fr)',
-        gridTemplateRows: `repeat(${rows}, 1fr)`,
-        gap: 2, background: '#000',
-        alignContent: 'center',
-      }}>
-        {tracks.map((track, i) => {
-          // If odd number and last item, span 2 columns
-          const isLastOdd = tracks.length % 2 !== 0 && i === tracks.length - 1;
-          return (
-            <div key={track.participant?.sid || i} style={{
-              position: 'relative', width: '100%', height: '100%',
-              minHeight: 0, borderRadius: 6, overflow: 'hidden', background: '#111827',
-              gridColumn: isLastOdd ? '1 / -1' : 'auto',
-            }}>
-              <MyParticipantTile trackRef={track} />
-            </div>
-          );
-        })}
-      </div>
+      <GridLayout tracks={tracks} style={{ width: '100%', height: '100%' }}>
+        <MyParticipantTile />
+      </GridLayout>
     );
   }
 
