@@ -543,7 +543,7 @@ function MeetingView({ myName, bandwidthMode, setBandwidthMode, participantsRef,
 
   return (
     <StealthContext.Provider value={{ stealthCamOn, stealthMicOn, myName, myPhotoURL }}>
-    <div className={`meeting-container ${stealthCamOn ? 'stealth-cam-global' : ''} ${stealthMicOn ? 'stealth-mic-global' : ''}`}>
+    <div className={`meeting-room ${stealthCamOn ? 'stealth-cam-global' : ''} ${stealthMicOn ? 'stealth-mic-global' : ''}`}>
       {connectionState === ConnectionState.Connecting && (
         <div style={{ position: 'absolute', inset: 0, zIndex: 9999, background: 'rgba(17,24,39,0.9)', backdropFilter: 'blur(4px)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
           <div style={{ width: 64, height: 64, borderRadius: '50%', border: '4px solid #374151', borderTopColor: '#ec4899', animation: 'spin 1s linear infinite', marginBottom: 24, boxShadow: '0 0 20px rgba(236,72,153,0.5)' }} />
@@ -891,7 +891,8 @@ export default function App() {
           scopes: ['profile', 'email'],
           grantOfflineAccess: true,
         });
-      } catch (e) { console.warn('GoogleAuth init error', e); }
+        console.log('GoogleAuth initialized OK');
+      } catch (e) { console.warn('GoogleAuth init error', e); alert('GoogleAuth init gagal: ' + (e.message || JSON.stringify(e))); }
     }
   }, []);
 
@@ -1035,7 +1036,9 @@ export default function App() {
                     setAuthScreen(false);
                   } catch (e) {
                     console.warn('Google Auth Error:', e);
-                    alert(`Google Login Gagal: ${e.message || JSON.stringify(e)}\n\n(Catatan: Jika error 10 atau 12500, pastikan SHA-1 terdaftar)`);
+                    const code = e?.code || e?.error || '';
+                    const msg = e?.message || 'Unknown error';
+                    alert(`Google Login Gagal\n\nError Code: ${code}\nMessage: ${msg}\nFull: ${JSON.stringify(e)}\n\n(Catatan: Error 10/12500 = SHA-1 belum terdaftar di Firebase)`);
                   }
                 }} 
                 style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12, background: 'white', color: '#1f2937', padding: '14px 24px', borderRadius: 16, fontSize: 14, fontWeight: 'bold', border: 'none', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)' }}
