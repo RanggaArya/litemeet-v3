@@ -803,7 +803,7 @@ export default function Home() {
       onDisconnected={handleDisconnected}
       options={roomOptions}
     >
-      <MyVideoConference myName={name} myPhotoURL={photoURL} bandwidthMode={bandwidthMode} setBandwidthMode={setBandwidthMode} participantsRef={participantsRef} saveMeetingToHistory={saveMeetingToHistory} onManualLeave={() => { userInitiatedLeaveRef.current = true; }} roomLink={roomLink} initialStatus={initialStatus} initialRole={initialRole} />
+      <MyVideoConference myName={name} myPhotoURL={photoURL} bandwidthMode={bandwidthMode} setBandwidthMode={setBandwidthMode} participantsRef={participantsRef} saveMeetingToHistory={saveMeetingToHistory} onManualLeave={() => { userInitiatedLeaveRef.current = true; }} roomLink={roomLink} initialStatus={initialStatus} initialRole={initialRole} hostSecret={hostSecretRef.current} />
       <RoomAudioRenderer />
     </LiveKitRoom>
   );
@@ -1135,7 +1135,7 @@ function MyParticipantTile({ trackRef, ...props }) {
     </div>
   );
 }
-function MyVideoConference({ myName, myPhotoURL, bandwidthMode, setBandwidthMode, participantsRef, saveMeetingToHistory, onManualLeave, roomLink, initialStatus, initialRole }) {
+function MyVideoConference({ myName, myPhotoURL, bandwidthMode, setBandwidthMode, participantsRef, saveMeetingToHistory, onManualLeave, roomLink, initialStatus, initialRole, hostSecret }) {
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
   const [toasts, setToasts] = useState([]);
@@ -1242,7 +1242,7 @@ function MyVideoConference({ myName, myPhotoURL, bandwidthMode, setBandwidthMode
   // FIX: Only the true room creator (who has a valid hostSecret) or super admins get host controls.
   // The hostSecret is generated server-side when the room is first created and returned only to the creator.
   // This prevents other participants from getting host controls even if they share the same username.
-  const isHost = (!!hostSecretRef.current && (localMeta.role === 'host' || initialRole === 'host')) || isSuperAdmin(myName);
+  const isHost = (!!hostSecret && (localMeta.role === 'host' || initialRole === 'host')) || isSuperAdmin(myName);
   const isWaiting = localMeta.status ? localMeta.status === 'waiting' : initialStatus === 'waiting';
 
   const [isWaitingRoomEnabled, setIsWaitingRoomEnabled] = useState(() => {
