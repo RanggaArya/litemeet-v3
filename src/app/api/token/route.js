@@ -37,10 +37,13 @@ export async function POST(req) {
                     if (parsedMeta.waitingRoom) isWaitingRoomEnabled = true;
                 } catch(e) {}
 
-                // Only grant host role if the user provides the correct hostSecret
-                if (hostSecret && parsedMeta.hostSecret && hostSecret === parsedMeta.hostSecret) {
+                // Grant host role if the user provides the correct hostSecret OR their verified email matches
+                if (
+                    (hostSecret && parsedMeta.hostSecret && hostSecret === parsedMeta.hostSecret) ||
+                    (email && parsedMeta.hostEmail && email === parsedMeta.hostEmail)
+                ) {
                     role = 'host';
-                    returnedHostSecret = hostSecret; // Return it so client can keep using it
+                    returnedHostSecret = parsedMeta.hostSecret || hostSecret; // Give them the secret so their new device caches it
                 }
             } else {
                 // Room doesn't exist — this user is the creator/host
@@ -51,7 +54,8 @@ export async function POST(req) {
                     name: room,
                     emptyTimeout: 300,
                     metadata: JSON.stringify({ 
-                        hostSecret: newHostSecret, 
+                        hostSecret: newHostSecret,
+                        hostEmail: email || null, 
                         waitingRoom: false 
                     })
                 });
