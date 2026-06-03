@@ -1016,8 +1016,8 @@ function MyParticipantTile({ trackRef, ...props }) {
     <div className={`relative w-full h-full group${hasAvatarOverlay ? ' has-avatar' : ''}`} {...props}>
       <LiveKitParticipantTile trackRef={actualTrackRef} />
 
-      {/* Google avatar overlay — sits BETWEEN placeholder (z-0) and metadata bar (z-10) */}
-      {isCameraMuted && photoToShow && !(isLocal && stealthCamOn) && (
+      {/* Google avatar overlay — covers entire tile with dark bg to hide default SVG */}
+      {hasAvatarOverlay && (
         <div style={{
           position: 'absolute',
           inset: 0,
@@ -1025,15 +1025,18 @@ function MyParticipantTile({ trackRef, ...props }) {
           alignItems: 'center',
           justifyContent: 'center',
           pointerEvents: 'none',
-          zIndex: 1,
+          zIndex: 2,
+          backgroundColor: 'var(--lk-bg2, #1e1e1e)',
+          borderRadius: 'inherit',
         }}>
           <img
             src={photoToShow}
             alt=""
             referrerPolicy="no-referrer"
             style={{
-              width: '120px',
-              height: '120px',
+              width: 'min(40%, 160px)',
+              aspectRatio: '1',
+              minWidth: '80px',
               borderRadius: '50%',
               objectFit: 'cover',
               border: '4px solid rgba(55,65,81,0.5)',
