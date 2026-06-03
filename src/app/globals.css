@@ -34,6 +34,21 @@ body {
   background-color: black !important;
 }
 
+/* Ensure name/mic/cam metadata bar stays above custom avatar overlay */
+.lk-participant-metadata {
+  z-index: 3 !important;
+}
+
+/* Ensure muted indicator icons are visible */
+.lk-participant-metadata-item {
+  z-index: 3 !important;
+}
+
+/* Hide default SVG placeholder when custom Google avatar is shown */
+.has-avatar .lk-participant-placeholder svg {
+  display: none !important;
+}
+
 .lk-video-container video {
   width: 100% !important;
   height: 100% !important;

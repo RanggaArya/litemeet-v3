@@ -1010,34 +1010,37 @@ function MyParticipantTile({ trackRef, ...props }) {
 
   const isCameraMuted = useIsMuted(Track.Source.Camera, { participant });
   const photoToShow = (isLocal && stealthCamOn) ? myPhotoURL : participantPhoto;
+  const hasAvatarOverlay = isCameraMuted && photoToShow && !(isLocal && stealthCamOn);
 
   return (
-    <div className={`relative w-full h-full group tile-${participant?.identity}`} {...props}>
+    <div className={`relative w-full h-full group${hasAvatarOverlay ? ' has-avatar' : ''}`} {...props}>
       <LiveKitParticipantTile trackRef={actualTrackRef} />
 
-      {/* Show Avatar when camera is muted (for all participants) via CSS to not cover default name/mic overlays */}
+      {/* Google avatar overlay — sits BETWEEN placeholder (z-0) and metadata bar (z-10) */}
       {isCameraMuted && photoToShow && !(isLocal && stealthCamOn) && (
-        <style dangerouslySetInnerHTML={{__html: `
-          .tile-${participant?.identity} .lk-participant-placeholder {
-            background-image: url('${photoToShow}') !important;
-            background-size: cover !important;
-            background-position: center !important;
-            border-radius: 50% !important;
-            width: 120px !important;
-            height: 120px !important;
-            margin: auto !important;
-            position: absolute !important;
-            top: 50% !important;
-            left: 50% !important;
-            transform: translate(-50%, -50%) !important;
-            border: 4px solid rgba(55, 65, 81, 0.5) !important;
-            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25) !important;
-            background-color: transparent !important;
-          }
-          .tile-${participant?.identity} .lk-participant-placeholder svg {
-            display: none !important;
-          }
-        `}} />
+        <div style={{
+          position: 'absolute',
+          inset: 0,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          pointerEvents: 'none',
+          zIndex: 1,
+        }}>
+          <img
+            src={photoToShow}
+            alt=""
+            referrerPolicy="no-referrer"
+            style={{
+              width: '120px',
+              height: '120px',
+              borderRadius: '50%',
+              objectFit: 'cover',
+              border: '4px solid rgba(55,65,81,0.5)',
+              boxShadow: '0 25px 50px -12px rgba(0,0,0,0.25)',
+            }}
+          />
+        </div>
       )}
 
       {/* For stealth mode specifically (local only) */}
