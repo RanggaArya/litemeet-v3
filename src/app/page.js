@@ -1053,7 +1053,6 @@ function MyParticipantTile({ trackRef, ...props }) {
              <div className="relative">
                <div className="absolute -inset-4 bg-gradient-to-br from-indigo-500/20 via-purple-500/20 to-pink-500/20 rounded-full blur-xl" />
                <img src={photoToShow} alt="" className="w-24 h-24 sm:w-32 sm:h-32 rounded-full object-cover border-2 border-white/20 shadow-2xl relative z-10" referrerPolicy="no-referrer" />
-               <div className="absolute -bottom-2 left-1/2 -translate-x-1/2 bg-black/60 backdrop-blur-md px-3 py-0.5 rounded-full text-white text-xs font-medium z-20">{myName}</div>
              </div>
            ) : (
              <div className="w-24 h-24 sm:w-32 sm:h-32 bg-gray-600/50 rounded-full flex items-center justify-center overflow-hidden">
