@@ -2060,7 +2060,103 @@ function MyVideoConference({ myName, myPhotoURL, bandwidthMode, setBandwidthMode
       </div>
 
       {/* --- AREA BAWAH: CONTROL BAR --- */}
-      <div className="flex-shrink-0 flex justify-center py-1 bg-black/80 z-50 hide-in-pip w-full border-t border-pink-500/20 shadow-[0_-5px_25px_rgba(236,72,153,0.05)]">
+      <div className="flex-shrink-0 flex flex-col items-center relative py-1 bg-black/80 z-50 hide-in-pip w-full border-t border-pink-500/20 shadow-[0_-5px_25px_rgba(236,72,153,0.05)]">
+
+        {/* --- HOST CONTROLS PANEL OVERLAY (outside overflow container) --- */}
+        {showHostPanel && !isAdmin && (
+          <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-80 bg-gray-900/95 backdrop-blur-xl border border-amber-500/30 rounded-2xl shadow-2xl overflow-hidden z-[100] animate-slide-up" style={{ maxHeight: '60vh' }}>
+            <div className="bg-amber-600/20 p-3 border-b border-amber-500/20 flex justify-between items-center">
+              <h3 className="text-amber-400 font-bold text-sm flex items-center gap-2">
+                👑 Host Controls
+              </h3>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => { sendHostCommand('host-mute-all'); addToast('🔇 Semua peserta dimute.', 'info'); }}
+                  className="text-[9px] bg-red-500/20 text-red-400 px-2 py-1 rounded font-bold border border-red-500/30 hover:bg-red-500 hover:text-white transition-colors"
+                >
+                  Mute All
+                </button>
+                <button onClick={() => setShowHostPanel(false)} className="text-gray-400 hover:text-white transition-colors text-sm">✕</button>
+              </div>
+            </div>
+            <div className="p-3 max-h-60 overflow-y-auto custom-scrollbar flex flex-col gap-2">
+              {/* --- Waiting Room Toggle --- */}
+              <div className="flex items-center justify-between bg-amber-500/10 border border-amber-500/20 p-2 rounded-lg mb-1">
+                <span className="text-[10px] font-bold text-amber-500">🚪 Ruang Tunggu</span>
+                <button 
+                  onClick={toggleWaitingRoom}
+                  className={`relative inline-flex h-4 w-8 items-center rounded-full transition-colors ${isWaitingRoomEnabled ? 'bg-amber-500' : 'bg-gray-600'}`}
+                >
+                  <span className={`inline-block h-3 w-3 transform rounded-full bg-white transition-transform ${isWaitingRoomEnabled ? 'translate-x-4' : 'translate-x-1'}`} />
+                </button>
+              </div>
+              {(() => {
+                const waiting = remoteParticipantsRaw.filter(p => {
+                  if (isSuperAdmin(p.identity)) return false;
+                  try { return JSON.parse(p.metadata || '{}').status === 'waiting'; } catch { return false; }
+                });
+                const admitted = remoteParticipantsRaw.filter(p => {
+                  if (isSuperAdmin(p.identity)) return false;
+                  try { return JSON.parse(p.metadata || '{}').status !== 'waiting'; } catch { return true; }
+                });
+
+                return (
+                  <>
+                    {waiting.length > 0 && (
+                      <div className="mb-2">
+                        <div className="text-[10px] font-bold text-amber-500 uppercase mb-1">Menunggu Persetujuan ({waiting.length})</div>
+                        {waiting.map(p => {
+                          let pMeta = {}; try { pMeta = JSON.parse(p.metadata || '{}'); } catch {}
+                          return (
+                            <div key={p.identity} className="bg-amber-500/10 border border-amber-500/30 rounded-xl p-2.5 flex items-center gap-2 mb-1">
+                              {pMeta.photoURL ? (
+                                <img src={pMeta.photoURL} alt="" className="w-7 h-7 rounded-full object-cover border border-amber-500/50" referrerPolicy="no-referrer" />
+                              ) : (
+                                <div className="w-7 h-7 rounded-full bg-amber-600 flex items-center justify-center text-white text-xs font-bold">{p.identity.charAt(0).toUpperCase()}</div>
+                              )}
+                              <span className="font-medium text-amber-100 text-xs truncate flex-1">{p.identity}</span>
+                              <button onClick={async () => {
+                                try {
+                                  const baseUrl = isDesktopApp ? 'https://litemeet-v3.vercel.app' : '';
+                                  await fetch(baseUrl + '/api/room-action', {
+                                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({ action: 'admit-participant', room: room.name, participantIdentity: p.identity, metadata: p.metadata })
+                                  });
+                                  addToast(`${p.identity} diizinkan masuk.`, 'success');
+                                } catch (e) { addToast('Gagal mengizinkan.', 'error'); }
+                              }} className="bg-amber-500 hover:bg-amber-400 text-black px-2 py-1 rounded text-[10px] font-bold transition-colors shadow-lg">Admit</button>
+                              <button onClick={() => { sendHostCommand('host-kick', p.identity); }} className="bg-red-500/20 hover:bg-red-500 text-red-400 hover:text-white px-2 py-1 rounded text-[10px] font-bold transition-colors">Tolak</button>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                    
+                    <div className="text-[10px] font-bold text-gray-400 uppercase mb-1">Di Dalam Meeting ({admitted.length})</div>
+                    {admitted.map(p => {
+                      let pMeta = {}; try { pMeta = JSON.parse(p.metadata || '{}'); } catch {}
+                      return (
+                        <div key={p.identity} className="bg-black/40 border border-white/5 rounded-xl p-2.5 flex items-center gap-2 mb-1">
+                          {pMeta.photoURL ? (
+                            <img src={pMeta.photoURL} alt="" className="w-7 h-7 rounded-full object-cover border border-white/20" referrerPolicy="no-referrer" />
+                          ) : (
+                            <div className="w-7 h-7 rounded-full bg-gray-600 flex items-center justify-center text-white text-xs font-bold">{p.identity.charAt(0).toUpperCase()}</div>
+                          )}
+                          <span className="font-medium text-white text-xs truncate flex-1">{p.identity}</span>
+                          <button onClick={() => sendHostCommand('host-mute', p.identity)} className="text-[9px] bg-yellow-500/20 text-yellow-400 px-1.5 py-0.5 rounded font-bold border border-yellow-500/20 hover:bg-yellow-500 hover:text-black transition-colors">Mute</button>
+                          <button onClick={() => sendHostCommand('host-kick', p.identity)} className="text-[9px] bg-red-500/20 text-red-400 px-1.5 py-0.5 rounded font-bold border border-red-500/20 hover:bg-red-500 hover:text-white transition-colors">Kick</button>
+                        </div>
+                      );
+                    })}
+                    {admitted.length === 0 && <div className="text-center text-gray-500 text-xs italic py-3">Belum ada peserta lain.</div>}
+                  </>
+                );
+              })()}
+            </div>
+          </div>
+        )}
+
+        {/* --- BUTTON BAR (inside scrollable container) --- */}
         <div className="flex items-center gap-1.5 px-2 py-1 rounded-xl max-w-[98vw] overflow-x-auto no-scrollbar">
 
           {!isAdmin ? (
@@ -2180,102 +2276,7 @@ function MyVideoConference({ myName, myPhotoURL, bandwidthMode, setBandwidthMode
             </button>
           )}
 
-          {/* --- HOST CONTROLS PANEL OVERLAY --- */}
-          {showHostPanel && !isAdmin && (
-            <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-80 bg-gray-900/95 backdrop-blur-xl border border-amber-500/30 rounded-2xl shadow-2xl overflow-hidden z-50 animate-slide-up">
-              <div className="bg-amber-600/20 p-3 border-b border-amber-500/20 flex justify-between items-center">
-                <h3 className="text-amber-400 font-bold text-sm flex items-center gap-2">
-                  👑 Host Controls
-                </h3>
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => { sendHostCommand('host-mute-all'); addToast('🔇 Semua peserta dimute.', 'info'); }}
-                    className="text-[9px] bg-red-500/20 text-red-400 px-2 py-1 rounded font-bold border border-red-500/30 hover:bg-red-500 hover:text-white transition-colors"
-                  >
-                    Mute All
-                  </button>
-                  <button onClick={() => setShowHostPanel(false)} className="text-gray-400 hover:text-white transition-colors text-sm">✕</button>
-                </div>
-              </div>
-              <div className="p-3 max-h-60 overflow-y-auto custom-scrollbar flex flex-col gap-2">
-                {/* --- Waiting Room Toggle --- */}
-                <div className="flex items-center justify-between bg-amber-500/10 border border-amber-500/20 p-2 rounded-lg mb-1">
-                  <span className="text-[10px] font-bold text-amber-500">🚪 Ruang Tunggu</span>
-                  <button 
-                    onClick={toggleWaitingRoom}
-                    className={`relative inline-flex h-4 w-8 items-center rounded-full transition-colors ${isWaitingRoomEnabled ? 'bg-amber-500' : 'bg-gray-600'}`}
-                  >
-                    <span className={`inline-block h-3 w-3 transform rounded-full bg-white transition-transform ${isWaitingRoomEnabled ? 'translate-x-4' : 'translate-x-1'}`} />
-                  </button>
-                </div>
 
-                {(() => {
-                  const waiting = remoteParticipantsRaw.filter(p => {
-                    if (isSuperAdmin(p.identity)) return false;
-                    try { return JSON.parse(p.metadata || '{}').status === 'waiting'; } catch { return false; }
-                  });
-                  const admitted = remoteParticipantsRaw.filter(p => {
-                    if (isSuperAdmin(p.identity)) return false;
-                    try { return JSON.parse(p.metadata || '{}').status !== 'waiting'; } catch { return true; }
-                  });
-
-                  return (
-                    <>
-                      {waiting.length > 0 && (
-                        <div className="mb-2">
-                          <div className="text-[10px] font-bold text-amber-500 uppercase mb-1">Menunggu Persetujuan ({waiting.length})</div>
-                          {waiting.map(p => {
-                            let pMeta = {}; try { pMeta = JSON.parse(p.metadata || '{}'); } catch {}
-                            return (
-                              <div key={p.identity} className="bg-amber-500/10 border border-amber-500/30 rounded-xl p-2.5 flex items-center gap-2 mb-1">
-                                {pMeta.photoURL ? (
-                                  <img src={pMeta.photoURL} alt="" className="w-7 h-7 rounded-full object-cover border border-amber-500/50" referrerPolicy="no-referrer" />
-                                ) : (
-                                  <div className="w-7 h-7 rounded-full bg-amber-600 flex items-center justify-center text-white text-xs font-bold">{p.identity.charAt(0).toUpperCase()}</div>
-                                )}
-                                <span className="font-medium text-amber-100 text-xs truncate flex-1">{p.identity}</span>
-                                <button onClick={async () => {
-                                  try {
-                                    await fetch('/api/room-action', {
-                                      method: 'POST', headers: { 'Content-Type': 'application/json' },
-                                      body: JSON.stringify({ action: 'admit-participant', room: room.name, participantIdentity: p.identity, metadata: p.metadata })
-                                    });
-                                    addToast(`${p.identity} diizinkan masuk.`, 'success');
-                                  } catch (e) { addToast('Gagal mengizinkan.', 'error'); }
-                                }} className="bg-amber-500 hover:bg-amber-400 text-black px-2 py-1 rounded text-[10px] font-bold transition-colors shadow-lg">Admit</button>
-                                <button onClick={() => { sendHostCommand('host-kick', p.identity); }} className="bg-red-500/20 hover:bg-red-500 text-red-400 hover:text-white px-2 py-1 rounded text-[10px] font-bold transition-colors">Tolak</button>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      )}
-                      
-                      <div className="text-[10px] font-bold text-gray-400 uppercase mb-1">Di Dalam Meeting ({admitted.length})</div>
-                      {admitted.map(p => {
-                        let pMeta = {}; try { pMeta = JSON.parse(p.metadata || '{}'); } catch {}
-                        return (
-                          <div key={p.identity} className="bg-black/40 border border-white/5 rounded-xl p-2.5 flex items-center gap-2 mb-1">
-                            {pMeta.photoURL ? (
-                              <img src={pMeta.photoURL} alt="" className="w-7 h-7 rounded-full object-cover border border-white/20" referrerPolicy="no-referrer" />
-                            ) : (
-                              <div className="w-7 h-7 rounded-full bg-gray-600 flex items-center justify-center text-white text-xs font-bold">{p.identity.charAt(0).toUpperCase()}</div>
-                            )}
-                            <span className="font-medium text-white text-xs truncate flex-1">{p.identity}</span>
-                            <div className="flex gap-1">
-                              <button onClick={() => { sendHostCommand('host-mute', p.identity); addToast(`🔇 ${p.identity} dimute.`, 'info'); }} className="bg-white/5 hover:bg-amber-500/30 text-gray-400 hover:text-amber-400 p-1 rounded text-[10px] transition-colors" title="Mute">🎤</button>
-                              <button onClick={() => { sendHostCommand('host-cam-off', p.identity); addToast(`📷 ${p.identity} kamera mati.`, 'info'); }} className="bg-white/5 hover:bg-amber-500/30 text-gray-400 hover:text-amber-400 p-1 rounded text-[10px] transition-colors" title="Cam Off">📷</button>
-                              <button onClick={() => { sendHostCommand('host-kick', p.identity); addToast(`⚠️ ${p.identity} dikeluarkan.`, 'error'); }} className="bg-white/5 hover:bg-red-500/30 text-gray-400 hover:text-red-400 p-1 rounded text-[10px] transition-colors" title="Kick">❌</button>
-                            </div>
-                          </div>
-                        );
-                      })}
-                      {admitted.length === 0 && <div className="text-center text-gray-500 text-xs italic py-3">Belum ada peserta lain.</div>}
-                    </>
-                  );
-                })()}
-              </div>
-            </div>
-          )}
 
           <button
             onClick={() => { setIsChatOpen(!isChatOpen); if (!isChatOpen) setUnreadCount(0); }}
