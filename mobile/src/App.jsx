@@ -869,6 +869,8 @@ export default function App() {
   const [adminApiSecret, setAdminApiSecret] = useState('');
   const [adminLoading, setAdminLoading] = useState(false);
   const [authScreen, setAuthScreen] = useState(true);
+  const [initialRole, setInitialRole] = useState('participant');
+  const [initialStatus, setInitialStatus] = useState('admitted');
 
   const retryCountRef = useRef(0);
   const userLeftRef = useRef(false);
@@ -949,7 +951,7 @@ export default function App() {
           ForegroundCall.startCall({ roomName: room }).catch(e => console.warn('FG service:', e)); 
         }
       } else { setConnectionError(data.error || 'Gagal mendapatkan token.'); }
-    } catch (e) { setConnectionError('Koneksi ke server gagal.'); }
+    } catch (e) { setConnectionError(`Koneksi ke server gagal: ${e.message || e}`); }
     finally { setLoading(false); }
   };
 
