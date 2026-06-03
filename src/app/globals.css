@@ -34,6 +34,12 @@ body {
   background-color: black !important;
 }
 
+/* Force LiveKit tile to fill the wrapper div from MyParticipantTile */
+.lk-participant-tile {
+  width: 100% !important;
+  height: 100% !important;
+}
+
 /* Ensure name/mic/cam metadata bar stays above custom avatar overlay */
 .lk-participant-metadata {
   z-index: 3 !important;
