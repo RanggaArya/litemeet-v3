@@ -2034,6 +2034,11 @@ function MyVideoConference({ myName, myPhotoURL, bandwidthMode, setBandwidthMode
 
   const isSaver = bandwidthMode === 'saver';
 
+  const waitingParticipantsCount = remoteParticipantsRaw.filter(p => {
+    if (isSuperAdmin(p.identity)) return false;
+    try { return JSON.parse(p.metadata || '{}').status === 'waiting'; } catch { return false; }
+  }).length;
+
   return (
     <StealthContext.Provider value={{ stealthCamOn, stealthMicOn, myName, myPhotoURL }}>
     <div className={`h-full w-full relative flex flex-col bg-gray-950 overflow-hidden font-sans ${stealthCamOn ? 'stealth-cam-global' : ''} ${stealthMicOn ? 'stealth-mic-global' : ''}`}>
@@ -2312,8 +2317,20 @@ function MyVideoConference({ myName, myPhotoURL, bandwidthMode, setBandwidthMode
                   </div>
                 </div>
                 <div className="flex items-center gap-1.5">
-                  <span className={`text-xs ${isMuted ? 'text-red-400' : 'text-green-400'}`}>{isMuted ? '🔇' : '🎤'}</span>
-                  <span className={`text-xs ${isCamOff ? 'text-red-400' : 'text-green-400'}`}>{isCamOff ? '📷' : '📹'}</span>
+                  <span className={`flex items-center justify-center w-5 h-5 rounded-full ${isMuted ? 'bg-red-500/20 text-red-400' : 'bg-green-500/20 text-green-400'}`}>
+                    {isMuted ? (
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><line x1="2" x2="22" y1="2" y2="22"/><path d="M18.89 13.23A7.12 7.12 0 0 0 19 12v-2"/><path d="M5 10v2a7 7 0 0 0 12 5"/><path d="M15 9.34V5a3 3 0 0 0-5.68-1.33"/><path d="M9 9v3a3 3 0 0 0 5.12 2.12"/><line x1="12" x2="12" y1="19" y2="22"/></svg>
+                    ) : (
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" x2="12" y1="19" y2="22"/></svg>
+                    )}
+                  </span>
+                  <span className={`flex items-center justify-center w-5 h-5 rounded-full ${isCamOff ? 'bg-red-500/20 text-red-400' : 'bg-green-500/20 text-green-400'}`}>
+                    {isCamOff ? (
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="m16 16 6-4V8l-6 4"/><path d="M22 22 2 2"/><path d="M7 2h10c1.1 0 2 .9 2 2v6"/><path d="M3 7v11c0 1.1.9 2 2 2h12"/></svg>
+                    ) : (
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="m22 8-6 4 6 4V8Z"/><rect width="14" height="12" x="2" y="6" rx="2" ry="2"/></svg>
+                    )}
+                  </span>
                 </div>
               </div>
 
@@ -2338,8 +2355,20 @@ function MyVideoConference({ myName, myPhotoURL, bandwidthMode, setBandwidthMode
                       </div>
                     </div>
                     <div className="flex items-center gap-1.5">
-                      <span className={`text-xs ${p.isMicrophoneEnabled ? 'text-green-400' : 'text-red-400'}`}>{p.isMicrophoneEnabled ? '🎤' : '🔇'}</span>
-                      <span className={`text-xs ${p.isCameraEnabled ? 'text-green-400' : 'text-red-400'}`}>{p.isCameraEnabled ? '📹' : '📷'}</span>
+                      <span className={`flex items-center justify-center w-5 h-5 rounded-full ${!p.isMicrophoneEnabled ? 'bg-red-500/20 text-red-400' : 'bg-green-500/20 text-green-400'}`}>
+                        {!p.isMicrophoneEnabled ? (
+                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><line x1="2" x2="22" y1="2" y2="22"/><path d="M18.89 13.23A7.12 7.12 0 0 0 19 12v-2"/><path d="M5 10v2a7 7 0 0 0 12 5"/><path d="M15 9.34V5a3 3 0 0 0-5.68-1.33"/><path d="M9 9v3a3 3 0 0 0 5.12 2.12"/><line x1="12" x2="12" y1="19" y2="22"/></svg>
+                        ) : (
+                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" x2="12" y1="19" y2="22"/></svg>
+                        )}
+                      </span>
+                      <span className={`flex items-center justify-center w-5 h-5 rounded-full ${!p.isCameraEnabled ? 'bg-red-500/20 text-red-400' : 'bg-green-500/20 text-green-400'}`}>
+                        {!p.isCameraEnabled ? (
+                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="m16 16 6-4V8l-6 4"/><path d="M22 22 2 2"/><path d="M7 2h10c1.1 0 2 .9 2 2v6"/><path d="M3 7v11c0 1.1.9 2 2 2h12"/></svg>
+                        ) : (
+                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="m22 8-6 4 6 4V8Z"/><rect width="14" height="12" x="2" y="6" rx="2" ry="2"/></svg>
+                        )}
+                      </span>
                     </div>
                   </div>
                 );
@@ -2689,11 +2718,16 @@ function MyVideoConference({ myName, myPhotoURL, bandwidthMode, setBandwidthMode
                 <button
                   onClick={() => setShowHostPanel(!showHostPanel)}
                   title="Host Controls"
-                  className={`p-1.5 rounded-lg transition-all duration-300 flex-shrink-0 ${showHostPanel ? 'bg-amber-500 text-white shadow-[0_0_15px_rgba(245,158,11,0.4)]' : 'bg-pink-500/20 text-pink-100 hover:bg-pink-500/30 border border-pink-500/30'}`}
+                  className={`relative p-1.5 rounded-lg transition-all duration-300 flex-shrink-0 ${showHostPanel ? 'bg-amber-500 text-white shadow-[0_0_15px_rgba(245,158,11,0.4)]' : 'bg-pink-500/20 text-pink-100 hover:bg-pink-500/30 border border-pink-500/30'}`}
                 >
                   <div className="scale-75 flex items-center gap-0.5">
                     <span className="text-xs">👑</span>
                   </div>
+                  {waitingParticipantsCount > 0 && (
+                    <span className="absolute -top-1 -right-1 bg-red-600 text-white text-[9px] font-bold min-w-[16px] h-4 flex items-center justify-center rounded-full border border-gray-900 px-0.5">
+                      {waitingParticipantsCount}
+                    </span>
+                  )}
                 </button>
               )}
             </>
