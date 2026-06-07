@@ -1353,6 +1353,8 @@ function MyVideoConference({ myName, myPhotoURL, bandwidthMode, setBandwidthMode
 
   // --- DESKTOP SCREEN SHARE PICKER STATE ---
   const [desktopSources, setDesktopSources] = useState(null);
+  const [pickerTab, setPickerTab] = useState('window');
+  const [selectedSourceId, setSelectedSourceId] = useState(null);
 
   const [isRecording, setIsRecording] = useState(false);
   const [recordingDuration, setRecordingDuration] = useState(0);
@@ -2168,39 +2170,75 @@ function MyVideoConference({ myName, myPhotoURL, bandwidthMode, setBandwidthMode
 
       {/* --- DESKTOP SCREEN PICKER MODAL --- */}
       {desktopSources && (
-        <div className="absolute inset-0 z-[9999] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-gray-900 rounded-2xl w-full max-w-4xl p-6 border border-white/10 shadow-2xl flex flex-col max-h-[80vh] animate-slide-up">
-            <h2 className="text-xl font-bold text-white mb-4">Choose what to share</h2>
-            <div className="flex-grow overflow-y-auto grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 custom-scrollbar">
-              {desktopSources.map(source => (
-                <div
-                  key={source.id}
-                  onClick={() => {
-                    window.electronAPI.selectDesktopSource(source.id);
-                    setDesktopSources(null);
-                  }}
-                  className="bg-gray-800 rounded-xl p-3 cursor-pointer hover:bg-indigo-600 transition-colors border border-white/5 flex flex-col"
+        <div className="absolute inset-0 z-[9999] bg-black/50 flex items-center justify-center p-4 backdrop-blur-sm animate-fade-in">
+          <div className="bg-[#202124] rounded-xl w-full max-w-4xl flex flex-col shadow-2xl border border-white/10" style={{ height: '70vh' }}>
+            <div className="p-6 pb-0">
+              <h2 className="text-xl text-white mb-2 font-normal tracking-wide">Choose what to share with litemeet-v3.vercel.app</h2>
+              <p className="text-gray-400 text-sm mb-6">The site will be able to see the contents of your screen</p>
+              <div className="flex border-b border-gray-600/50 gap-4">
+                <button
+                  onClick={() => { setPickerTab('window'); setSelectedSourceId(null); }}
+                  className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${pickerTab === 'window' ? 'text-blue-400 border-blue-400' : 'text-gray-400 border-transparent hover:text-gray-200 hover:bg-white/5'} flex-1 sm:flex-none text-center`}
                 >
-                  <div className="w-full aspect-video bg-black rounded-lg mb-3 overflow-hidden flex items-center justify-center">
-                    {source.thumbnail ? (
-                      <img src={source.thumbnail} alt={source.name} className="max-w-full max-h-full object-contain" />
-                    ) : (
-                      <span className="text-gray-500 text-xs">No preview</span>
-                    )}
-                  </div>
-                  <p className="text-white text-sm truncate text-center font-medium">{source.name}</p>
-                </div>
-              ))}
+                  Window
+                </button>
+                <button
+                  onClick={() => { setPickerTab('screen'); setSelectedSourceId(null); }}
+                  className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${pickerTab === 'screen' ? 'text-blue-400 border-blue-400' : 'text-gray-400 border-transparent hover:text-gray-200 hover:bg-white/5'} flex-1 sm:flex-none text-center`}
+                >
+                  Entire Screen
+                </button>
+              </div>
             </div>
-            <div className="flex justify-end mt-6 pt-4 border-t border-white/10">
+            
+            <div className="flex-grow overflow-y-auto p-6 bg-[#202124] custom-scrollbar">
+              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                {desktopSources.filter(s => pickerTab === 'window' ? s.id.startsWith('window:') : s.id.startsWith('screen:')).map(source => (
+                  <div
+                    key={source.id}
+                    onClick={() => setSelectedSourceId(source.id)}
+                    onDoubleClick={() => {
+                      window.electronAPI.selectDesktopSource(source.id);
+                      setDesktopSources(null);
+                    }}
+                    className={`rounded-lg p-2 cursor-pointer transition-all border flex flex-col items-center gap-3
+                      ${selectedSourceId === source.id ? 'bg-blue-500/20 border-blue-500' : 'bg-transparent border-transparent hover:bg-white/5'}
+                    `}
+                  >
+                    <div className="w-full aspect-video bg-[#18191b] rounded overflow-hidden flex items-center justify-center border border-white/5 pointer-events-none">
+                      {source.thumbnail ? (
+                        <img src={source.thumbnail} alt={source.name} className="max-w-full max-h-full object-contain" />
+                      ) : (
+                        <span className="text-gray-500 text-xs">No preview</span>
+                      )}
+                    </div>
+                    <p className="text-gray-300 text-xs truncate w-full text-center">{source.name}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="p-4 border-t border-gray-600/50 flex justify-end gap-3 bg-[#202124] rounded-b-xl">
               <button
                 onClick={() => {
                   window.electronAPI.selectDesktopSource(null);
                   setDesktopSources(null);
                 }}
-                className="px-6 py-2 rounded-xl bg-gray-700 hover:bg-gray-600 text-white font-bold transition-colors"
+                className="px-6 py-2 rounded-full border border-gray-500 text-blue-400 hover:bg-blue-400/10 font-medium text-sm transition-colors"
               >
                 Cancel
+              </button>
+              <button
+                onClick={() => {
+                  if (selectedSourceId) {
+                    window.electronAPI.selectDesktopSource(selectedSourceId);
+                    setDesktopSources(null);
+                  }
+                }}
+                disabled={!selectedSourceId}
+                className={`px-8 py-2 rounded-full font-medium text-sm transition-colors ${selectedSourceId ? 'bg-blue-500 hover:bg-blue-400 text-white shadow-md' : 'bg-blue-500/30 text-white/50 cursor-not-allowed'}`}
+              >
+                Share
               </button>
             </div>
           </div>
