@@ -38,9 +38,9 @@ export async function POST(req) {
                     if (parsedMeta.waitingRoom) isWaitingRoomEnabled = true;
                 } catch(e) {}
 
-                // Grant host role if the user provides the correct hostSecret OR their verified email matches
+                // Grant host role if the user provides the correct hostSecret (and matching name) OR their verified email matches
                 if (
-                    (hostSecret && parsedMeta.hostSecret && hostSecret === parsedMeta.hostSecret) ||
+                    (hostSecret && parsedMeta.hostSecret && hostSecret === parsedMeta.hostSecret && (!parsedMeta.hostName || username === parsedMeta.hostName)) ||
                     (email && parsedMeta.hostEmail && email === parsedMeta.hostEmail)
                 ) {
                     role = 'host';
@@ -87,7 +87,8 @@ export async function POST(req) {
                     emptyTimeout: 300,
                     metadata: JSON.stringify({ 
                         hostSecret: newHostSecret,
-                        hostEmail: email || null, 
+                        hostEmail: email || null,
+                        hostName: username,
                         waitingRoom: false 
                     })
                 });
