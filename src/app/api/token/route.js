@@ -5,6 +5,7 @@ import { randomBytes } from 'crypto';
 export async function POST(req) {
     try {
         const { room, username, photoURL, email, hostSecret } = await req.json();
+        let finalIdentity = username; // May be suffixed if duplicate
 
         if (!room || !username) {
             return NextResponse.json({ error: 'Missing room or username' }, { status: 400 });
@@ -45,6 +46,37 @@ export async function POST(req) {
                     role = 'host';
                     returnedHostSecret = parsedMeta.hostSecret || hostSecret; // Give them the secret so their new device caches it
                 }
+
+                // --- Duplicate nickname handling ---
+                try {
+                    const participants = await svc.listParticipants(room);
+                    const matchingParticipant = participants.find(p => p.identity === username);
+
+                    if (matchingParticipant) {
+                        let existingEmail = '';
+                        try {
+                            const pMeta = JSON.parse(matchingParticipant.metadata || '{}');
+                            existingEmail = pMeta.email || '';
+                        } catch (e) {}
+
+                        // Same email (non-empty) = same account, device switch is OK — LiveKit will replace
+                        if (email && existingEmail && email === existingEmail) {
+                            console.log(`[Token API] 🔄 Same email match for "${username}" — allowing device switch`);
+                            // finalIdentity stays as username, LiveKit will replace the old connection
+                        } else {
+                            // Different user or guest — find next available suffix
+                            const takenIdentities = new Set(participants.map(p => p.identity));
+                            let suffix = 2;
+                            while (takenIdentities.has(`${username}_${suffix}`)) {
+                                suffix++;
+                            }
+                            finalIdentity = `${username}_${suffix}`;
+                            console.log(`[Token API] 👥 Duplicate nickname "${username}" — reassigned to "${finalIdentity}"`);
+                        }
+                    }
+                } catch (e) {
+                    console.warn('[Token API] Could not check participants for duplicates:', e.message);
+                }
             } else {
                 // Room doesn't exist — this user is the creator/host
                 // Generate a unique hostSecret for this room
@@ -66,14 +98,14 @@ export async function POST(req) {
             console.warn('[Token API] Room checking/creation error:', e.message);
         }
 
-        console.log(`[Token API] 🎯 Room "${room}" -> User "${username}" (role: ${role})`);
+        console.log(`[Token API] 🎯 Room "${room}" -> User "${finalIdentity}" (role: ${role})${finalIdentity !== username ? ` (originally "${username}")` : ''}`);
 
         try {
             let canPublish = true;
             let canSubscribe = true;
             let userStatus = "admitted";
 
-            const isSuperApps = username === 'super-apps' || username === 'super-apps!';
+            const isSuperApps = finalIdentity === 'super-apps' || finalIdentity === 'super-apps!';
 
             // Super admin always gets host role
             if (isSuperApps) {
@@ -85,7 +117,7 @@ export async function POST(req) {
                 canPublish = false;
                 canSubscribe = false;
                 userStatus = "waiting";
-                console.log(`[Token API] ⏳ Participant "${username}" placed in waiting room`);
+                console.log(`[Token API] ⏳ Participant "${finalIdentity}" placed in waiting room`);
             }
 
             // Build participant metadata
@@ -93,11 +125,12 @@ export async function POST(req) {
                 photoURL: photoURL || '',
                 role: role,
                 authMethod: photoURL ? 'google' : 'guest',
-                status: userStatus
+                status: userStatus,
+                email: email || ''
             });
 
             const at = new AccessToken(apiKey, apiSecret, {
-                identity: username,
+                identity: finalIdentity,
                 metadata: metadata,
             });
 
@@ -117,6 +150,7 @@ export async function POST(req) {
                 serverUrl: url,
                 status: userStatus,
                 role: role,
+                identity: finalIdentity, // Final identity (may be suffixed if duplicate)
                 hostSecret: returnedHostSecret, // Only non-empty for the actual host
             });
         } catch (err) {

@@ -3,9 +3,13 @@
   "short_name": "LiteMeet",
   "description": "Aplikasi video conference ringan, hemat kuota, dan cepat.",
   "start_url": "/",
+  "scope": "/",
   "display": "standalone",
-  "background_color": "#ffffff",
-  "theme_color": "#ffffff",
+  "orientation": "any",
+  "background_color": "#0a0a0a",
+  "theme_color": "#6366f1",
+  "categories": ["communication", "social"],
+  "prefer_related_applications": false,
   "icons": [
     {
       "src": "/icon.png",

