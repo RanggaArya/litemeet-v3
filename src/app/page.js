@@ -1257,8 +1257,9 @@ function MyParticipantTile({ trackRef, ...props }) {
   }, [participant?.metadata]);
 
   const isCameraMuted = useIsMuted(Track.Source.Camera, { participant });
+  const isScreenShare = actualTrackRef?.source === Track.Source.ScreenShare;
   const photoToShow = (isLocal && stealthCamOn) ? myPhotoURL : participantPhoto;
-  const hasAvatarOverlay = isCameraMuted && photoToShow && !(isLocal && stealthCamOn);
+  const hasAvatarOverlay = !isScreenShare && isCameraMuted && photoToShow && !(isLocal && stealthCamOn);
 
   return (
     <div className={`relative w-full h-full group${hasAvatarOverlay ? ' has-avatar' : ''}`} {...props}>
@@ -1295,7 +1296,7 @@ function MyParticipantTile({ trackRef, ...props }) {
       )}
 
       {/* For stealth mode specifically (local only) */}
-      {isLocal && stealthCamOn && (
+      {isLocal && stealthCamOn && !isScreenShare && (
          <div className="absolute inset-0 bg-[#1f2937] flex items-center justify-center z-10 rounded-[inherit]">
            {photoToShow ? (
              <div className="relative">
