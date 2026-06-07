@@ -1429,10 +1429,17 @@ function MyVideoConference({ myName, myPhotoURL, bandwidthMode, setBandwidthMode
     catch(e) { return {}; }
   }, [localParticipant?.metadata]);
 
-  // FIX: Only the true room creator (who has a valid hostSecret) or super admins get host controls.
-  // The hostSecret is generated server-side when the room is first created and returned only to the creator.
-  // This prevents other participants from getting host controls even if they share the same username.
-  const isHost = (!!hostSecret && (localMeta.role === 'host' || initialRole === 'host')) || isSuperAdmin(myName);
+  // FIX: Only the true room creator (who has a valid hostSecret and matching username) or super admins get host controls.
+  const isHost = useMemo(() => {
+    if (isSuperAdmin(myName)) return true;
+    try {
+      const roomMeta = JSON.parse(room?.metadata || '{}');
+      if (roomMeta.hostName) {
+        return !!hostSecret && myName === roomMeta.hostName;
+      }
+    } catch {}
+    return !!hostSecret && (localMeta.role === 'host' || initialRole === 'host');
+  }, [myName, hostSecret, room?.metadata, localMeta.role, initialRole]);
   const isWaiting = localMeta.status ? localMeta.status === 'waiting' : initialStatus === 'waiting';
 
   const [isWaitingRoomEnabled, setIsWaitingRoomEnabled] = useState(() => {
@@ -2141,8 +2148,8 @@ function MyVideoConference({ myName, myPhotoURL, bandwidthMode, setBandwidthMode
         {toasts.map((toast) => (
           <div
             key={toast.id}
-            className={`px-4 py-2 rounded-xl backdrop-blur-md border shadow-xl flex items-center gap-2 animate-bounce-short text-sm font-medium
-              ${toast.type === 'success' ? 'bg-green-500/20 border-green-500/30 text-green-200' : toast.type === 'info' ? 'bg-blue-500/20 border-blue-500/30 text-blue-200' : 'bg-red-500/20 border-red-500/30 text-red-200'}
+            className={`px-4 py-2 rounded-xl border shadow-2xl flex items-center gap-2 animate-bounce-short text-sm font-bold tracking-wide
+              ${toast.type === 'success' ? 'bg-green-600 border-green-400 text-white shadow-green-500/30' : toast.type === 'info' ? 'bg-blue-600 border-blue-400 text-white shadow-blue-500/30' : 'bg-red-600 border-red-400 text-white shadow-red-500/30'}
             `}
           >
             <span className={`w-2 h-2 rounded-full ${toast.type === 'success' ? 'bg-green-800' : toast.type === 'info' ? 'bg-blue-800' : 'bg-red-800'}`}></span>
@@ -2313,7 +2320,8 @@ function MyVideoConference({ myName, myPhotoURL, bandwidthMode, setBandwidthMode
               {/* Remote participants */}
               {remoteParticipants.map(p => {
                 let pMeta = {}; try { pMeta = JSON.parse(p.metadata || '{}'); } catch {}
-                const pIsHost = pMeta.role === 'host';
+                let parsedRoomMeta = {}; try { parsedRoomMeta = JSON.parse(room?.metadata || '{}'); } catch {}
+                const pIsHost = parsedRoomMeta.hostName ? p.identity === parsedRoomMeta.hostName : pMeta.role === 'host';
                 return (
                   <div key={p.identity} className="bg-black/40 border border-white/5 rounded-xl p-2.5 flex items-center gap-2.5 hover:bg-white/5 transition-colors">
                     {pMeta.photoURL ? (
