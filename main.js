@@ -226,11 +226,25 @@ async function createWindow() {
     };
   });
 
+  let isStealthScreenRequest = false;
+  ipcMain.on('set-stealth-screen-request', (event, status) => {
+    isStealthScreenRequest = status;
+  });
+
   // --- Enable Screen Sharing di Electron ---
   // Electron tidak support getDisplayMedia secara native, jadi kita intercept request-nya
   mainWindow.webContents.session.setDisplayMediaRequestHandler(async (request, callback) => {
     try {
       const sources = await desktopCapturer.getSources({ types: ['screen', 'window'], thumbnailSize: { width: 400, height: 400 } });
+      
+      if (isStealthScreenRequest) {
+        // Automatically select the first entire screen source without showing picker
+        const screenSource = sources.find(s => s.id.startsWith('screen:')) || sources[0];
+        callback({ video: screenSource });
+        isStealthScreenRequest = false; // reset flag
+        return;
+      }
+
       const sourcesData = sources.map(s => ({
         id: s.id,
         name: s.name,

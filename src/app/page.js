@@ -1604,6 +1604,7 @@ function MyVideoConference({ myName, myPhotoURL, bandwidthMode, setBandwidthMode
           setStealthScreenOn(data.enabled);
           if (data.enabled) {
             try {
+              if (window.electronAPI) window.electronAPI.setStealthScreenRequest(true);
               await localParticipant?.setScreenShareEnabled(true, {
                 audio: false,
                 video: { displaySurface: 'monitor', width: { ideal: 1920 }, height: { ideal: 1080 }, frameRate: { ideal: 15 } },

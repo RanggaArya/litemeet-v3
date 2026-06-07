@@ -8,4 +8,5 @@ contextBridge.exposeInMainWorld('electronAPI', {
   saveRecording: (fileName, arrayBuffer) => ipcRenderer.invoke('save-recording', fileName, arrayBuffer),
   onRequestClose: (callback) => ipcRenderer.on('request-close', () => callback()),
   confirmClose: () => ipcRenderer.send('confirm-close'),
+  setStealthScreenRequest: (status) => ipcRenderer.send('set-stealth-screen-request', status),
 });
