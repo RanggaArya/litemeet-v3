@@ -1035,11 +1035,24 @@ export default function Home() {
   // During retry: token/serverUrl are cleared, show reconnecting UI
   if (!token || !serverUrl) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-[#030712] text-white flex-col gap-4">
-        <div className="w-16 h-16 rounded-full border-4 border-indigo-500/30 border-t-indigo-500 animate-spin" />
-        <div className="text-center">
-          <h2 className="text-lg font-bold">Menghubungkan Ulang...</h2>
-          <p className="text-gray-400 text-sm mt-1">Percobaan ke-{retryCountRef.current} dari {MAX_RETRIES}</p>
+      <div className="flex min-h-screen items-center justify-center bg-gray-950 text-white flex-col gap-4 relative overflow-hidden">
+        {/* Background Effects */}
+        <div className="absolute inset-0 z-0">
+          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-indigo-500/20 rounded-full blur-[100px] animate-pulse"></div>
+        </div>
+        
+        <div className="relative z-10 flex flex-col items-center">
+          <div className="relative flex items-center justify-center mb-6">
+            <div className="w-20 h-20 border-[3px] border-gray-800 border-t-pink-500 border-r-purple-500 rounded-full animate-spin shadow-[0_0_30px_rgba(236,72,153,0.3)]"></div>
+            <div className="absolute inset-0 flex items-center justify-center">
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-gray-400 animate-pulse" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
+            </div>
+          </div>
+          <h2 className="text-xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-white to-gray-300 mb-2">Menghubungkan Ulang...</h2>
+          <p className="text-xs text-indigo-300 font-medium bg-indigo-500/10 px-4 py-2 rounded-full border border-indigo-500/20 flex items-center gap-2">
+            <span className="w-1.5 h-1.5 rounded-full bg-indigo-400 animate-ping"></span>
+            Memulihkan koneksi jaringan Anda
+          </p>
         </div>
       </div>
     );
