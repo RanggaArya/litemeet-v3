@@ -4,7 +4,7 @@ import { randomBytes } from 'crypto';
 
 export async function POST(req) {
     try {
-        const { room, username, photoURL, email, hostSecret } = await req.json();
+        const { room, username, photoURL, email, hostSecret, waitingRoomPref } = await req.json();
         let finalIdentity = username; // May be suffixed if duplicate
 
         if (!room || !username) {
@@ -84,12 +84,12 @@ export async function POST(req) {
                 
                 await svc.createRoom({
                     name: room,
-                    emptyTimeout: 300,
+                    emptyTimeout: 600,
                     metadata: JSON.stringify({ 
                         hostSecret: newHostSecret,
                         hostEmail: email || null,
                         hostName: username,
-                        waitingRoom: false 
+                        waitingRoom: waitingRoomPref || false 
                     })
                 });
                 role = 'host';

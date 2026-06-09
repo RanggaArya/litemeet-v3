@@ -438,7 +438,10 @@ export default function Home() {
     await signOut(auth);
     setAuthUser(null);
     setPhotoURL('');
+    setName('');
+    setAuthEmail('');
     localStorage.removeItem('litemeet_google_auth');
+    setAuthScreen(true); // Go back to welcome screen
   };
 
   // --- Meeting History ---
@@ -537,6 +540,13 @@ export default function Home() {
           photoURL: photoURL || '',
           email: authEmail || '',
           hostSecret: localSecret,
+          // Pass saved waiting room preference so new rooms inherit the setting
+          waitingRoomPref: (() => {
+            try {
+              const prefs = JSON.parse(localStorage.getItem('litemeet_room_prefs') || '{}');
+              return prefs[actualRoomName]?.waitingRoom || false;
+            } catch { return false; }
+          })(),
         }),
         signal: controller.signal,
       });
@@ -656,6 +666,11 @@ export default function Home() {
     }
   }, [room, name]);
 
+  // Store joinRoom in a ref so handleDisconnected always calls the latest version
+  // without creating circular dependency issues
+  const joinRoomRef = useRef(joinRoom);
+  useEffect(() => { joinRoomRef.current = joinRoom; });
+
   // Auto-retry on unexpected disconnect — fetch FRESH token on each retry
   const handleDisconnected = useCallback(() => {
     if (userInitiatedLeaveRef.current) {
@@ -667,13 +682,14 @@ export default function Home() {
 
     if (retryCountRef.current < MAX_RETRIES) {
       retryCountRef.current += 1;
-      const retryDelay = Math.min(1000 * Math.pow(2, retryCountRef.current - 1), 5000);
+      const retryDelay = Math.min(1500 * Math.pow(2, retryCountRef.current - 1), 8000);
       console.log(`[LiteMeet] 🔄 Disconnected — auto-retrying in ${retryDelay}ms (attempt ${retryCountRef.current}/${MAX_RETRIES})...`);
-      // Clear stale token, then re-fetch a fresh one
+      // Keep joined=true so UI stays in meeting view during retry,
+      // but clear token so LiveKitRoom unmounts cleanly first
       setToken('');
       setServerUrl('');
       setTimeout(() => {
-        joinRoom(true);
+        joinRoomRef.current(true);
       }, retryDelay);
     } else {
       console.log('[LiteMeet] ❌ Max retries reached, returning to lobby.');
@@ -683,7 +699,7 @@ export default function Home() {
       setServerUrl('');
       setConnectionError('Koneksi terputus. Silakan coba lagi.');
     }
-  }, [room, name, saveMeetingToHistory, joinRoom]);
+  }, [saveMeetingToHistory]);
 
   // --- AUTH SCREEN (before lobby) ---
   if (!joined && authScreen && !authLoading) {
@@ -801,6 +817,17 @@ export default function Home() {
                 <div className="text-[8px] text-indigo-400 truncate">{authUser.email}</div>
               </div>
               <button onClick={handleSignOut} className="text-[9px] text-indigo-400 hover:text-red-500 font-bold transition-colors">Logout</button>
+            </div>
+          )}
+          {/* Guest: show button to go to welcome screen for Google login */}
+          {!authUser && (
+            <div className="flex items-center gap-2 mb-3 bg-amber-50/80 rounded-lg px-3 py-2 border border-amber-200">
+              <span className="text-xs">👤</span>
+              <div className="flex-1 min-w-0">
+                <div className="text-[10px] font-bold text-amber-700">Mode Guest</div>
+                <div className="text-[8px] text-amber-500">Login Google untuk foto profil & fitur lengkap</div>
+              </div>
+              <button onClick={() => setAuthScreen(true)} className="text-[9px] text-blue-500 hover:text-blue-700 font-bold transition-colors whitespace-nowrap">Login Google</button>
             </div>
           )}
 
@@ -992,6 +1019,19 @@ export default function Home() {
 
         {/* Version info */}
         <div className="absolute bottom-3 right-4 z-10 text-[9px] text-gray-400/60 font-mono">App Version 0.2.0</div>
+      </div>
+    );
+  }
+
+  // During retry: token/serverUrl are cleared, show reconnecting UI
+  if (!token || !serverUrl) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-[#030712] text-white flex-col gap-4">
+        <div className="w-16 h-16 rounded-full border-4 border-indigo-500/30 border-t-indigo-500 animate-spin" />
+        <div className="text-center">
+          <h2 className="text-lg font-bold">Menghubungkan Ulang...</h2>
+          <p className="text-gray-400 text-sm mt-1">Percobaan ke-{retryCountRef.current} dari {MAX_RETRIES}</p>
+        </div>
       </div>
     );
   }
@@ -1486,12 +1526,20 @@ function MyVideoConference({ myName, myPhotoURL, bandwidthMode, setBandwidthMode
   const toggleWaitingRoom = async () => {
     try {
       const currentMeta = JSON.parse(room.metadata || '{}');
-      const newMeta = JSON.stringify({ ...currentMeta, waitingRoom: !isWaitingRoomEnabled });
+      const newVal = !isWaitingRoomEnabled;
+      const newMeta = JSON.stringify({ ...currentMeta, waitingRoom: newVal });
       const baseUrl = isDesktopApp ? 'https://litemeet-v3.vercel.app' : '';
       
       // Optimistic update
-      setIsWaitingRoomEnabled(!isWaitingRoomEnabled);
-      addToast(`🚪 Ruang Tunggu ${!isWaitingRoomEnabled ? 'AKTIF' : 'NONAKTIF'}`, 'info');
+      setIsWaitingRoomEnabled(newVal);
+      addToast(`🚪 Ruang Tunggu ${newVal ? 'AKTIF' : 'NONAKTIF'}`, 'info');
+
+      // Save preference in localStorage so it persists across room re-creation
+      try {
+        const prefs = JSON.parse(localStorage.getItem('litemeet_room_prefs') || '{}');
+        prefs[room.name] = { ...prefs[room.name], waitingRoom: newVal };
+        localStorage.setItem('litemeet_room_prefs', JSON.stringify(prefs));
+      } catch(e) {}
 
       await fetch(baseUrl + '/api/room-action', {
         method: 'POST',
