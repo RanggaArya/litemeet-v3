@@ -26,7 +26,7 @@ const isSuperAdmin = (identity) => {
   return name === 'super-apps' || name === 'super-apps!';
 };
 
-// ============ NOTIFICATION SOUNDS (like Google Meet) ============
+// ============ NOTIFICATION SOUNDS ============
 const playSound = (type) => {
   try {
     const ctx = new (window.AudioContext || window.webkitAudioContext)();
@@ -34,35 +34,45 @@ const playSound = (type) => {
     const gain = ctx.createGain();
     osc.connect(gain);
     gain.connect(ctx.destination);
-    osc.type = 'sine';
+
     if (type === 'join') {
-      gain.gain.setValueAtTime(0.12, ctx.currentTime);
-      osc.frequency.setValueAtTime(523, ctx.currentTime); // C5
-      osc.frequency.setValueAtTime(659, ctx.currentTime + 0.12); // E5
-      gain.gain.setValueAtTime(0.12, ctx.currentTime + 0.12);
-      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.35);
+      // Pleasant ascending chime
+      osc.type = 'sine';
+      gain.gain.setValueAtTime(0, ctx.currentTime);
+      gain.gain.linearRampToValueAtTime(0.1, ctx.currentTime + 0.02);
+      osc.frequency.setValueAtTime(523.25, ctx.currentTime); // C5
+      osc.frequency.setValueAtTime(783.99, ctx.currentTime + 0.1); // G5
+      gain.gain.setValueAtTime(0.1, ctx.currentTime + 0.15);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.5);
       osc.start(ctx.currentTime);
-      osc.stop(ctx.currentTime + 0.35);
+      osc.stop(ctx.currentTime + 0.5);
     } else if (type === 'leave') {
-      gain.gain.setValueAtTime(0.1, ctx.currentTime);
-      osc.frequency.setValueAtTime(659, ctx.currentTime); // E5
-      osc.frequency.setValueAtTime(440, ctx.currentTime + 0.12); // A4
-      gain.gain.setValueAtTime(0.1, ctx.currentTime + 0.12);
-      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.35);
+      // Soft descending chime
+      osc.type = 'sine';
+      gain.gain.setValueAtTime(0, ctx.currentTime);
+      gain.gain.linearRampToValueAtTime(0.08, ctx.currentTime + 0.02);
+      osc.frequency.setValueAtTime(659.25, ctx.currentTime); // E5
+      osc.frequency.setValueAtTime(329.63, ctx.currentTime + 0.12); // E4
+      gain.gain.setValueAtTime(0.08, ctx.currentTime + 0.15);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.5);
       osc.start(ctx.currentTime);
-      osc.stop(ctx.currentTime + 0.35);
+      osc.stop(ctx.currentTime + 0.5);
     } else if (type === 'connected') {
+      // Success chord
       gain.gain.setValueAtTime(0.1, ctx.currentTime);
-      osc.frequency.setValueAtTime(523, ctx.currentTime);
-      osc.frequency.setValueAtTime(659, ctx.currentTime + 0.1);
-      osc.frequency.setValueAtTime(784, ctx.currentTime + 0.2);
+      osc.type = 'triangle';
+      osc.frequency.setValueAtTime(523.25, ctx.currentTime);
+      osc.frequency.setValueAtTime(659.25, ctx.currentTime + 0.1);
+      osc.frequency.setValueAtTime(783.99, ctx.currentTime + 0.2);
       gain.gain.setValueAtTime(0.1, ctx.currentTime + 0.2);
-      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.45);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.5);
       osc.start(ctx.currentTime);
-      osc.stop(ctx.currentTime + 0.45);
+      osc.stop(ctx.currentTime + 0.5);
     }
     setTimeout(() => ctx.close(), 1000);
-  } catch (e) { console.warn('Audio play failed', e); }
+  } catch (e) {
+    console.warn("AudioContext tak didukung:", e);
+  }
 };
 
 const StealthContext = createContext({ stealthCamOn: false, stealthMicOn: false, myName: '' });
@@ -2133,9 +2143,42 @@ function MyVideoConference({ myName, myPhotoURL, bandwidthMode, setBandwidthMode
     try { return JSON.parse(p.metadata || '{}').status === 'waiting'; } catch { return false; }
   }).length;
 
+  const [showSlowNetwork, setShowSlowNetwork] = useState(false);
+  useEffect(() => {
+    let timer;
+    if (connectionState === ConnectionState.Connecting) {
+      timer = setTimeout(() => setShowSlowNetwork(true), 4000); // Tampil pesan lambat setelah 4 detik
+    } else {
+      setShowSlowNetwork(false);
+    }
+    return () => clearTimeout(timer);
+  }, [connectionState]);
+
   return (
     <StealthContext.Provider value={{ stealthCamOn, stealthMicOn, myName, myPhotoURL }}>
     <div className={`h-full w-full relative flex flex-col bg-gray-950 overflow-hidden font-sans ${stealthCamOn ? 'stealth-cam-global' : ''} ${stealthMicOn ? 'stealth-mic-global' : ''}`}>
+      
+      {/* Aesthetic Connecting Overlay */}
+      <div className={`absolute inset-0 z-[9999] bg-gray-950/95 backdrop-blur-xl flex flex-col items-center justify-center transition-opacity duration-700 ease-in-out ${connectionState === ConnectionState.Connecting ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}`}>
+        <div className="relative flex items-center justify-center mb-8">
+          <div className="absolute inset-0 bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 rounded-full blur-[30px] opacity-40 animate-pulse"></div>
+          <div className="w-24 h-24 border-[3px] border-gray-800 border-t-pink-500 border-r-purple-500 rounded-full animate-spin shadow-[0_0_40px_rgba(236,72,153,0.3)]"></div>
+          <div className="absolute inset-0 flex items-center justify-center">
+            <div className="w-12 h-12 bg-gray-900 rounded-full flex items-center justify-center">
+               <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-gray-400 animate-pulse" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>
+            </div>
+          </div>
+        </div>
+        <h2 className="text-2xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-white to-gray-300 mb-4 tracking-wide">
+          Menghubungkan ke Room...
+        </h2>
+        <div className={`transition-all duration-1000 transform ${showSlowNetwork ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'}`}>
+          <p className="text-xs text-indigo-300 font-medium bg-indigo-500/10 px-5 py-2.5 rounded-full border border-indigo-500/20 flex items-center gap-2">
+            <span className="w-1.5 h-1.5 rounded-full bg-indigo-400 animate-ping"></span>
+            Mengoptimalkan koneksi jaringan...
+          </p>
+        </div>
+      </div>
 
       <style dangerouslySetInnerHTML={{
         __html: `
