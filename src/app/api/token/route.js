@@ -4,7 +4,13 @@ import { randomBytes } from 'crypto';
 
 export async function POST(req) {
     try {
-        const { room, username, photoURL, email, hostSecret, waitingRoomPref } = await req.json();
+        const { room, username, photoURL, email, hostSecret, waitingRoomPref, warmup } = await req.json();
+
+        // Handle pre-warm requests to wake up Vercel cold starts instantly
+        if (warmup) {
+            return NextResponse.json({ success: true, message: 'Server warmed up!' });
+        }
+
         let finalIdentity = username; // May be suffixed if duplicate
 
         if (!room || !username) {

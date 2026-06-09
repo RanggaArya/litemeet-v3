@@ -468,6 +468,19 @@ export default function Home() {
     if (last.room) setRoom(last.room);
   }, []);
 
+  // Pre-warm the Vercel token API serverless function so it boots up while user is reading the lobby
+  useEffect(() => {
+    if (!joined && !authScreen) {
+      const isElectron = typeof window !== 'undefined' && window.electronAPI;
+      const apiUrl = isElectron ? 'https://litemeet-v3.vercel.app/api/token' : '/api/token';
+      fetch(apiUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ warmup: true })
+      }).catch(() => {}); // ignore errors silently
+    }
+  }, [joined, authScreen]);
+
   const removeHistoryEntry = (e, id) => {
     e.stopPropagation();
     const newHistory = removeHistoryEntryLocal(id);
