@@ -824,8 +824,7 @@ export default function Home() {
             <div className="flex items-center gap-2 mb-3 bg-amber-50/80 rounded-lg px-3 py-2 border border-amber-200">
               <span className="text-xs">👤</span>
               <div className="flex-1 min-w-0">
-                <div className="text-[10px] font-bold text-amber-700">Mode Guest</div>
-                <div className="text-[8px] text-amber-500">Login Google untuk foto profil & fitur lengkap</div>
+                <div className="text-[10px] font-bold text-amber-700">Mode Guest ({name || 'Anonim'})</div>
               </div>
               <button onClick={() => setAuthScreen(true)} className="text-[9px] text-blue-500 hover:text-blue-700 font-bold transition-colors whitespace-nowrap">Login Google</button>
             </div>
@@ -1517,10 +1516,10 @@ function MyVideoConference({ myName, myPhotoURL, bandwidthMode, setBandwidthMode
     const handleRoomMeta = (metadata) => {
       try { setIsWaitingRoomEnabled(JSON.parse(metadata || '{}').waitingRoom === true); } catch {}
     };
-    room.on('roomMetadataChanged', handleRoomMeta);
+    room.on(RoomEvent.RoomMetadataChanged, handleRoomMeta);
     // Init in case it changed before listener attached
     handleRoomMeta(room.metadata);
-    return () => room.off('roomMetadataChanged', handleRoomMeta);
+    return () => room.off(RoomEvent.RoomMetadataChanged, handleRoomMeta);
   }, [room]);
 
   const toggleWaitingRoom = async () => {
@@ -2137,13 +2136,7 @@ function MyVideoConference({ myName, myPhotoURL, bandwidthMode, setBandwidthMode
   return (
     <StealthContext.Provider value={{ stealthCamOn, stealthMicOn, myName, myPhotoURL }}>
     <div className={`h-full w-full relative flex flex-col bg-gray-950 overflow-hidden font-sans ${stealthCamOn ? 'stealth-cam-global' : ''} ${stealthMicOn ? 'stealth-mic-global' : ''}`}>
-      {connectionState === ConnectionState.Connecting && (
-        <div className="absolute inset-0 z-[9999] bg-gray-900/90 backdrop-blur-sm flex flex-col items-center justify-center">
-          <div className="w-16 h-16 border-4 border-gray-700 border-t-pink-500 rounded-full animate-spin mb-6 shadow-[0_0_20px_rgba(236,72,153,0.5)]"></div>
-          <h2 className="text-xl font-bold text-white mb-2 tracking-wide animate-pulse">Menghubungkan ke Server...</h2>
-          <p className="text-sm text-gray-400 font-medium bg-gray-800/50 px-4 py-2 rounded-full border border-gray-700/50">Mohon tunggu, proses ini memakan waktu ± 10-15 detik</p>
-        </div>
-      )}
+
       <style dangerouslySetInnerHTML={{
         __html: `
         @keyframes borderDance {
