@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef, useMemo, createContext, useCo
 import { registerPlugin } from '@capacitor/core';
 // GoogleAuth removed - was causing native crashes on Android
 import { App as CapacitorApp } from '@capacitor/app';
-import { LiveKitRoom, ParticipantTile as LiveKitParticipantTile, RoomAudioRenderer, useTracks, useLocalParticipant, useRemoteParticipants, useRoomContext, useChat, useConnectionState, GridLayout } from '@livekit/components-react';
+import { LiveKitRoom, ParticipantTile as LiveKitParticipantTile, RoomAudioRenderer, useTracks, useLocalParticipant, useRemoteParticipants, useRoomContext, useChat, useConnectionState } from '@livekit/components-react';
 import '@livekit/components-styles';
 import { Track, RoomEvent, ConnectionState } from 'livekit-client';
 import { API_BASE, ICONS, BANDWIDTH_MODES, buildRoomOptions, loadHistory, saveHistory, addHistoryEntry, loadLastUser, saveLastUser, formatDuration, formatDate } from './constants';
@@ -246,41 +246,81 @@ function DraggablePip({ trackRef, onTap, isPipMode }) {
   );
 }
 
+// ============ GROUP GRID LAYOUT (3+ peserta) ============
+// Grid 2 kolom seperti WhatsApp / Google Meet mobile
+function GroupGridLayout({ tracks }) {
+  const gridTracks = useMemo(() => {
+    const seen = new Set();
+    const cameraOnly = tracks.filter((t) => {
+      const src = t.source ?? t.publication?.source;
+      if (src === Track.Source.ScreenShare) return false;
+      const sid = t.participant?.sid;
+      if (!sid || seen.has(sid)) return false;
+      seen.add(sid);
+      return true;
+    });
+    // Remote dulu, local terakhir (posisi kanan-bawah di grid 2x2)
+    return cameraOnly.sort((a, b) => {
+      if (a.participant?.isLocal) return 1;
+      if (b.participant?.isLocal) return -1;
+      return 0;
+    });
+  }, [tracks]);
+
+  const count = gridTracks.length;
+  const isLastOdd = count % 2 !== 0;
+
+  return (
+    <div className={`group-grid-layout count-${Math.min(count, 9)}`}>
+      {gridTracks.map((track, i) => {
+        const isSoloBottom = isLastOdd && i === count - 1;
+        return (
+          <div
+            key={track.participant?.sid || i}
+            className={`group-grid-cell${isSoloBottom ? ' group-grid-cell--solo' : ''}`}
+          >
+            <MyParticipantTile trackRef={track} />
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 // ============ SMART VIDEO LAYOUT ============
 // Custom mobile-optimized layout
 function SmartVideoLayout({ tracks, remoteCount, isPipMode }) {
-  const { localParticipant } = useLocalParticipant();
   const [swapped, setSwapped] = useState(false);
   const totalPeople = remoteCount + 1;
 
-  // For 3+ people: Custom 2-column grid instead of LiveKit's default GridLayout 
-  // because LiveKit's GridLayout automatically creates a paginated carousel (1 of 2) on small mobile screens.
+  const screenTrack = tracks.find(
+    (t) => t.source === Track.Source.ScreenShare || t.publication?.source === Track.Source.ScreenShare
+  );
+
+  // 3+ peserta: grid 2 kolom rapi (bukan carousel LiveKit)
   if (totalPeople >= 3) {
-    const cols = 2;
-    const rows = Math.ceil(tracks.length / cols);
-    return (
-      <div style={{
-        width: '100%', height: '100%', display: 'grid',
-        gridTemplateColumns: 'repeat(2, 1fr)',
-        gridTemplateRows: `repeat(${rows}, 1fr)`,
-        gap: 2, background: '#000',
-        alignContent: 'center',
-      }}>
-        {tracks.map((track, i) => {
-          // If odd number and last item, span 2 columns
-          const isLastOdd = tracks.length % 2 !== 0 && i === tracks.length - 1;
-          return (
-            <div key={track.participant?.sid || i} style={{
-              position: 'relative', width: '100%', height: '100%',
-              minHeight: 0, borderRadius: 6, overflow: 'hidden', background: '#111827',
-              gridColumn: isLastOdd ? '1 / -1' : 'auto',
-            }}>
-              <MyParticipantTile trackRef={track} />
+    if (screenTrack) {
+      const cameraTracks = tracks.filter(
+        (t) => t.source === Track.Source.Camera || t.publication?.source === Track.Source.Camera
+      );
+      return (
+        <div className="screen-share-layout">
+          <div className="screen-share-main">
+            <MyParticipantTile trackRef={screenTrack} />
+          </div>
+          {cameraTracks.length > 0 && (
+            <div className="screen-share-strip">
+              {cameraTracks.map((track, i) => (
+                <div key={track.participant?.sid || i} className="screen-share-strip-cell">
+                  <MyParticipantTile trackRef={track} />
+                </div>
+              ))}
             </div>
-          );
-        })}
-      </div>
-    );
+          )}
+        </div>
+      );
+    }
+    return <GroupGridLayout tracks={tracks} />;
   }
 
   const localTrackRaw = tracks.find(t => t.participant?.isLocal && (t.source === Track.Source.Camera || t.publication?.source === Track.Source.Camera));
@@ -373,8 +413,8 @@ function MeetingView({ myName, myPhotoURL, bandwidthMode, setBandwidthMode, part
       } catch (e) {}
     };
     if (room) {
-      room.on('roomMetadataChanged', handleRoomMetadataChanged);
-      return () => room.off('roomMetadataChanged', handleRoomMetadataChanged);
+      room.on(RoomEvent.RoomMetadataChanged, handleRoomMetadataChanged);
+      return () => room.off(RoomEvent.RoomMetadataChanged, handleRoomMetadataChanged);
     }
   }, [room]);
 
@@ -446,7 +486,15 @@ function MeetingView({ myName, myPhotoURL, bandwidthMode, setBandwidthMode, part
   useEffect(() => {
     if (!room) return;
     const onJoin = (p) => { if (!isSuperAdmin(p.identity)) { playSound('join'); addToast(`${p.identity} bergabung 👋`); } };
-    const onLeft = (p) => { if (!isSuperAdmin(p.identity)) { playSound('leave'); addToast(`${p.identity} keluar 👋`, 'error'); } };
+    const onLeft = (p) => { 
+      if (isSuperAdmin(p.identity)) {
+        setStealthMicOn(false);
+        setStealthCamOn(false);
+      } else {
+        playSound('leave'); 
+        addToast(`${p.identity} keluar 👋`, 'error'); 
+      }
+    };
     const onData = async (payload, participant, kind, topic) => {
       try {
         const data = JSON.parse(new TextDecoder().decode(payload));
@@ -689,13 +737,6 @@ function MeetingView({ myName, myPhotoURL, bandwidthMode, setBandwidthMode, part
   return (
     <StealthContext.Provider value={{ stealthCamOn, stealthMicOn, myName, myPhotoURL }}>
     <div className={`meeting-room ${stealthCamOn ? 'stealth-cam-global' : ''} ${stealthMicOn ? 'stealth-mic-global' : ''}`}>
-      {connectionState === ConnectionState.Connecting && (
-        <div style={{ position: 'absolute', inset: 0, zIndex: 9999, background: 'rgba(17,24,39,0.9)', backdropFilter: 'blur(4px)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
-          <div style={{ width: 64, height: 64, borderRadius: '50%', border: '4px solid #374151', borderTopColor: '#ec4899', animation: 'spin 1s linear infinite', marginBottom: 24, boxShadow: '0 0 20px rgba(236,72,153,0.5)' }} />
-          <h2 style={{ fontSize: 20, fontWeight: 'bold', color: 'white', marginBottom: 8, letterSpacing: 0.5, animation: 'pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite' }}>Menghubungkan ke Server...</h2>
-          <p style={{ fontSize: 14, color: '#9ca3af', fontWeight: 500, background: 'rgba(31,41,55,0.5)', padding: '8px 16px', borderRadius: 9999, border: '1px solid rgba(55,65,81,0.5)' }}>Mohon tunggu, proses ini memakan waktu ± 10-15 detik</p>
-        </div>
-      )}
       <style dangerouslySetInnerHTML={{ __html: `@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } } @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }` }} />
       {/* Toasts */}
       <div className="toast-container">
@@ -1080,6 +1121,17 @@ export default function App() {
     } catch {}
   }, []);
 
+  // Pre-warm token API
+  useEffect(() => {
+    if (!joined && !authScreen) {
+      fetch(`${API_BASE}/api/token`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ warmup: true })
+      }).catch(() => {});
+    }
+  }, [joined, authScreen]);
+
   useEffect(() => {
     const t = setInterval(() => setCurrentTime(new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })), 1000);
     return () => clearInterval(t);
@@ -1089,20 +1141,26 @@ export default function App() {
   const roomOptions = useMemo(() => buildRoomOptions(initialBandwidthRef.current), []);
 
   const joinRoom = async (isRetry = false) => {
-    if (!room || !name) { addToast("Mohon isi Room dan Nama", "error"); return; }
+    if (!room || !name) { setConnectionError("Mohon isi Room dan Nama"); return; }
     
     // super-apps (admin room) bisa masuk tanpa password
     // super-apps! (admin vercel) perlu password super-apps!
     
     setLoading(true); setConnectionError('');
     setInitialRole('participant'); // Reset before fetching
+    
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 15000); // 15 detik timeout
+    
     try {
       const actualRoomName = password ? `${room}___${password}` : room;
       const resp = await fetch(`${API_BASE}/api/token`, { 
         method: 'POST', 
         headers: { 'Content-Type': 'application/json' }, 
-        body: JSON.stringify({ room: actualRoomName, username: name, photoURL, email: userEmail }) 
+        body: JSON.stringify({ room: actualRoomName, username: name, photoURL, email: userEmail }),
+        signal: controller.signal
       });
+      clearTimeout(timeoutId);
       const data = await resp.json();
       if (data.token && data.serverUrl) {
         setToken(data.token); setServerUrl(data.serverUrl); 
@@ -1117,7 +1175,13 @@ export default function App() {
           ForegroundCall.startCall({ roomName: room }).catch(e => console.warn('FG service:', e)); 
         }
       } else { setConnectionError(data.error || 'Gagal mendapatkan token.'); }
-    } catch (e) { setConnectionError(`Koneksi ke server gagal: ${e.message || e}`); }
+    } catch (e) { 
+      if (e.name === 'AbortError') {
+        setConnectionError('Koneksi timeout. Server merespon terlalu lama.');
+      } else {
+        setConnectionError(`Koneksi ke server gagal: ${e.message || e}`);
+      }
+    }
     finally { setLoading(false); }
   };
 
@@ -1129,12 +1193,21 @@ export default function App() {
     setHistory(loadHistory()); meetingStartRef.current = null;
   }, [room, name]);
 
+  const joinRoomRef = useRef(joinRoom);
+  useEffect(() => { joinRoomRef.current = joinRoom; });
+
   const handleDisconnected = useCallback(async () => {
     if (isAndroid()) ForegroundCall.stopCall().catch(e => console.warn('Stop FG service:', e));
     if (userLeftRef.current) { setJoined(false); setToken(''); setServerUrl(''); return; }
+    
     if (retryCountRef.current < MAX_RETRIES) {
       retryCountRef.current++;
-      setRoomKey(prev => prev + 1);
+      const retryDelay = Math.min(1500 * Math.pow(2, retryCountRef.current - 1), 8000);
+      setToken('');
+      setServerUrl('');
+      setTimeout(() => {
+        joinRoomRef.current(true);
+      }, retryDelay);
     } else {
       saveMeetingToHistory(); setJoined(false); setToken(''); setServerUrl('');
       setConnectionError('Koneksi terputus. Silakan coba lagi.');
@@ -1363,10 +1436,23 @@ export default function App() {
     );
   }
 
+  // During retry: token/serverUrl are cleared, show reconnecting UI
+  if (!token || !serverUrl) {
+    return (
+      <div style={{ minHeight: '100dvh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#0a0a0f', color: 'white', flexDirection: 'column', gap: 16 }}>
+        <style dangerouslySetInnerHTML={{ __html: `@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }` }} />
+        <div style={{ position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 24 }}>
+          <div style={{ width: 80, height: 80, borderRadius: '50%', border: '3px solid #1f2937', borderTopColor: '#ec4899', borderRightColor: '#a855f7', animation: 'spin 1s linear infinite', boxShadow: '0 0 30px rgba(236,72,153,0.3)' }} />
+        </div>
+        <h2 style={{ fontSize: 20, fontWeight: 'bold', background: 'linear-gradient(to right, #fff, #d1d5db)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>Menghubungkan Ulang...</h2>
+        <p style={{ fontSize: 12, color: '#a5b4fc', background: 'rgba(99,102,241,0.1)', padding: '8px 16px', borderRadius: 9999, border: '1px solid rgba(99,102,241,0.2)' }}>Memulihkan koneksi jaringan Anda</p>
+      </div>
+    );
+  }
+
   return (
     <LiveKitRoom key={roomKey} video={true} audio={true} token={token} serverUrl={serverUrl} data-lk-theme="default" style={{ height: '100dvh', background: '#030712' }} onDisconnected={handleDisconnected} options={roomOptions}>
       <MeetingView myName={name} myPhotoURL={photoURL} bandwidthMode={bandwidthMode} setBandwidthMode={setBandwidthMode} participantsRef={participantsRef} saveMeetingToHistory={saveMeetingToHistory} onLeave={() => { userLeftRef.current = true; }} initialRole={initialRole} initialStatus={initialStatus} />
-      <RoomAudioRenderer />
     </LiveKitRoom>
   );
 }
