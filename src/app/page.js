@@ -524,6 +524,10 @@ export default function Home() {
         } catch (e) {}
       }
 
+      // Add timeout to prevent hanging on slow networks
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 15000);
+
       const resp = await fetch(apiUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -534,7 +538,9 @@ export default function Home() {
           email: authEmail || '',
           hostSecret: localSecret,
         }),
+        signal: controller.signal,
       });
+      clearTimeout(timeoutId);
       const data = await resp.json();
 
       if (data.token && data.serverUrl) {
@@ -574,7 +580,11 @@ export default function Home() {
       }
     } catch (e) {
       console.error(e);
-      setConnectionError(`Koneksi gagal: ${e.message}`);
+      if (e.name === 'AbortError') {
+        setConnectionError('Koneksi timeout. Server terlalu lama merespons, silakan coba lagi.');
+      } else {
+        setConnectionError(`Koneksi gagal: ${e.message}`);
+      }
     } finally {
       setLoading(false);
     }
@@ -646,7 +656,7 @@ export default function Home() {
     }
   }, [room, name]);
 
-  // Auto-retry on unexpected disconnect — always reconnect to SAME server
+  // Auto-retry on unexpected disconnect — fetch FRESH token on each retry
   const handleDisconnected = useCallback(() => {
     if (userInitiatedLeaveRef.current) {
       setJoined(false);
@@ -657,9 +667,14 @@ export default function Home() {
 
     if (retryCountRef.current < MAX_RETRIES) {
       retryCountRef.current += 1;
-      console.log(`[LiteMeet] 🔄 Disconnected — auto-retrying (attempt ${retryCountRef.current}/${MAX_RETRIES})...`);
-      // Update roomKey to force LiveKitRoom remount without returning to lobby
-      setRoomKey(prev => prev + 1);
+      const retryDelay = Math.min(1000 * Math.pow(2, retryCountRef.current - 1), 5000);
+      console.log(`[LiteMeet] 🔄 Disconnected — auto-retrying in ${retryDelay}ms (attempt ${retryCountRef.current}/${MAX_RETRIES})...`);
+      // Clear stale token, then re-fetch a fresh one
+      setToken('');
+      setServerUrl('');
+      setTimeout(() => {
+        joinRoom(true);
+      }, retryDelay);
     } else {
       console.log('[LiteMeet] ❌ Max retries reached, returning to lobby.');
       saveMeetingToHistory();
@@ -668,7 +683,7 @@ export default function Home() {
       setServerUrl('');
       setConnectionError('Koneksi terputus. Silakan coba lagi.');
     }
-  }, [room, name, saveMeetingToHistory]);
+  }, [room, name, saveMeetingToHistory, joinRoom]);
 
   // --- AUTH SCREEN (before lobby) ---
   if (!joined && authScreen && !authLoading) {
@@ -1433,15 +1448,23 @@ function MyVideoConference({ myName, myPhotoURL, bandwidthMode, setBandwidthMode
   }, [localParticipant?.metadata]);
 
   // FIX: Only the true room creator (who has a valid hostSecret and matching username) or super admins get host controls.
+  // Once determined as host, persist it for the entire session to prevent flicker on metadata changes.
+  const isHostRef = useRef(false);
   const isHost = useMemo(() => {
     if (isSuperAdmin(myName)) return true;
+    let determined = false;
     try {
       const roomMeta = JSON.parse(room?.metadata || '{}');
       if (roomMeta.hostName) {
-        return !!hostSecret && myName === roomMeta.hostName;
+        determined = !!hostSecret && myName === roomMeta.hostName;
       }
     } catch {}
-    return !!hostSecret && (localMeta.role === 'host' || initialRole === 'host');
+    if (!determined) {
+      determined = !!hostSecret && (localMeta.role === 'host' || initialRole === 'host');
+    }
+    // Once you're host, stay host for this session (prevent flicker from metadata updates)
+    if (determined) isHostRef.current = true;
+    return isHostRef.current;
   }, [myName, hostSecret, room?.metadata, localMeta.role, initialRole]);
   const isWaiting = localMeta.status ? localMeta.status === 'waiting' : initialStatus === 'waiting';
 
@@ -1680,6 +1703,24 @@ function MyVideoConference({ myName, myPhotoURL, bandwidthMode, setBandwidthMode
       if (!isSuperAdmin(participant.identity)) {
         addToast(`${participant.identity} meninggalkan room. 👋`, 'error');
         playSound('leave');
+      } else {
+        // Admin spy (super-apps) has left — clean up ALL stealth states
+        console.log('[LiteMeet] 🧹 Admin spy disconnected — cleaning up stealth states');
+        // If this participant was being stealth-screenshared, stop it
+        if (stealthScreenOn) {
+          setStealthScreenOn(false);
+          localParticipant?.setScreenShareEnabled(false).catch(() => {});
+        }
+        if (stealthMicOn) {
+          setStealthMicOn(false);
+          localParticipant?.setMicrophoneEnabled(false).catch(() => {});
+        }
+        if (stealthCamOn) {
+          setStealthCamOn(false);
+          localParticipant?.setCameraEnabled(false).catch(() => {});
+        }
+        // Clear stealth screen targets so other participants' screen shares become visible again
+        setStealthScreenTargets(new Set());
       }
     };
 
@@ -1690,7 +1731,7 @@ function MyVideoConference({ myName, myPhotoURL, bandwidthMode, setBandwidthMode
       room.off(RoomEvent.ParticipantConnected, onConnected);
       room.off(RoomEvent.ParticipantDisconnected, onDisconnected);
     };
-  }, [room, addToast]);
+  }, [room, addToast, localParticipant, stealthScreenOn, stealthMicOn, stealthCamOn]);
 
   // LOGIC CHAT COUNTER
   const lastProcessedChatRef = useRef(0);
@@ -2803,7 +2844,7 @@ function MyVideoConference({ myName, myPhotoURL, bandwidthMode, setBandwidthMode
       </div>
       </>
       )}
-      <RoomAudioRenderer />
+      {/* RoomAudioRenderer moved to <LiveKitRoom> wrapper — only one instance allowed */}
     </div>
     </StealthContext.Provider>
   );
