@@ -7,8 +7,11 @@ import android.app.PendingIntent;
 import android.app.Service;
 import android.content.Intent;
 import android.content.pm.ServiceInfo;
+import android.media.AudioAttributes;
 import android.os.Build;
+import android.os.Handler;
 import android.os.IBinder;
+import android.os.Looper;
 import android.os.PowerManager;
 import android.util.Log;
 import androidx.core.app.NotificationCompat;
@@ -16,7 +19,13 @@ import androidx.core.app.NotificationCompat;
 /**
  * LiteMeet Call Foreground Service
  * Menjaga proses tetap berjalan saat layar mati (background call seperti WhatsApp)
- * Hanya pakai MICROPHONE type agar kompatibel semua versi Android
+ * 
+ * Perbaikan dari versi sebelumnya:
+ * - Notifikasi lebih smooth dengan update berkala (durasi panggilan)
+ * - Channel priority disesuaikan agar tidak mengganggu tapi tetap sticky
+ * - Chronometer bawaan Android untuk tampilan durasi real-time
+ * - Warna dan icon yang lebih profesional
+ * - Silent notification (tanpa suara/getaran)
  */
 public class CallForegroundService extends Service {
 
@@ -27,6 +36,7 @@ public class CallForegroundService extends Service {
     private static final int    NOTIF_ID    = 2001;
 
     private PowerManager.WakeLock wakeLock;
+    private long callStartTime = 0;
 
     @Override
     public void onCreate() {
@@ -64,39 +74,9 @@ public class CallForegroundService extends Service {
         String roomName = (intent != null) ? intent.getStringExtra("roomName") : "Panggilan";
         if (roomName == null || roomName.isEmpty()) roomName = "Panggilan Aktif";
 
-        // Intent untuk membuka kembali app saat notifikasi ditekan
-        Intent openApp = new Intent(this, MainActivity.class);
-        openApp.setFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP);
-        PendingIntent pendingOpen = PendingIntent.getActivity(
-            this, 0, openApp,
-            PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE
-        );
+        callStartTime = android.os.SystemClock.elapsedRealtime();
 
-        // Intent untuk mengakhiri panggilan dari notifikasi
-        Intent stopIntent = new Intent(this, CallForegroundService.class);
-        stopIntent.setAction(ACTION_STOP);
-        PendingIntent pendingStop = PendingIntent.getService(
-            this, 1, stopIntent,
-            PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE
-        );
-
-        Notification notification = new NotificationCompat.Builder(this, CHANNEL_ID)
-            .setContentTitle("LiteMeet — Panggilan Aktif")
-            .setContentText("Room: " + roomName)
-            .setSmallIcon(android.R.drawable.ic_menu_call)
-            .setOngoing(true)         // Tidak bisa digeser/dismiss
-            .setAutoCancel(false)     // Tidak hilang saat diklik
-            .setCategory(NotificationCompat.CATEGORY_CALL)
-            .setPriority(NotificationCompat.PRIORITY_MAX)
-            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
-            .setColor(0xFF25D366) // Hijau ala WhatsApp
-            .setColorized(true)
-            .setContentIntent(pendingOpen)
-            .addAction(android.R.drawable.ic_menu_close_clear_cancel, "Akhiri", pendingStop)
-            .build();
-
-        // Tambahkan flag agar benar-benar tidak bisa di-dismiss
-        notification.flags |= Notification.FLAG_NO_CLEAR | Notification.FLAG_ONGOING_EVENT;
+        Notification notification = buildNotification(roomName);
 
         // Mulai sebagai foreground service — microphone dan camera type
         try {
@@ -124,6 +104,66 @@ public class CallForegroundService extends Service {
         return START_STICKY;
     }
 
+    private Notification buildNotification(String roomName) {
+        // Intent untuk membuka kembali app saat notifikasi ditekan
+        Intent openApp = new Intent(this, MainActivity.class);
+        openApp.setFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP | Intent.FLAG_ACTIVITY_CLEAR_TOP);
+        PendingIntent pendingOpen = PendingIntent.getActivity(
+            this, 0, openApp,
+            PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE
+        );
+
+        // Intent untuk mengakhiri panggilan dari notifikasi
+        Intent stopIntent = new Intent(this, CallForegroundService.class);
+        stopIntent.setAction(ACTION_STOP);
+        PendingIntent pendingStop = PendingIntent.getService(
+            this, 1, stopIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE
+        );
+
+        // Intent untuk kembali ke app (tombol "Kembali")
+        Intent returnIntent = new Intent(this, MainActivity.class);
+        returnIntent.setFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP | Intent.FLAG_ACTIVITY_REORDER_TO_FRONT);
+        PendingIntent pendingReturn = PendingIntent.getActivity(
+            this, 2, returnIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE
+        );
+
+        NotificationCompat.Builder builder = new NotificationCompat.Builder(this, CHANNEL_ID)
+            .setContentTitle("Panggilan Aktif")
+            .setContentText(roomName)
+            .setSubText("LiteMeet")
+            .setSmallIcon(android.R.drawable.ic_menu_call)
+            .setOngoing(true)           // Tidak bisa digeser/dismiss
+            .setAutoCancel(false)       // Tidak hilang saat diklik
+            .setOnlyAlertOnce(true)     // KUNCI: hanya alert sekali, update selanjutnya silent
+            .setCategory(NotificationCompat.CATEGORY_CALL)
+            .setPriority(NotificationCompat.PRIORITY_LOW) // LOW agar tidak mengganggu tapi tetap sticky
+            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+            .setColor(0xFF6366F1)       // Indigo/ungu LiteMeet branding
+            .setColorized(true)
+            .setContentIntent(pendingOpen)
+            // Chronometer: tampilkan durasi panggilan real-time seperti WhatsApp
+            .setUsesChronometer(true)
+            .setWhen(System.currentTimeMillis())
+            // Tombol aksi
+            .addAction(android.R.drawable.ic_menu_view, "Kembali", pendingReturn)
+            .addAction(android.R.drawable.ic_menu_close_clear_cancel, "Akhiri", pendingStop)
+            // Silent — tidak ada suara/getaran saat notif muncul
+            .setSilent(true);
+
+        // Full-screen intent agar tampil di lock screen seperti panggilan masuk (opsional)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            builder.setForegroundServiceBehavior(NotificationCompat.FOREGROUND_SERVICE_IMMEDIATE);
+        }
+
+        Notification notification = builder.build();
+        // Flag agar benar-benar tidak bisa di-dismiss
+        notification.flags |= Notification.FLAG_NO_CLEAR | Notification.FLAG_ONGOING_EVENT;
+
+        return notification;
+    }
+
     @Override
     public IBinder onBind(Intent intent) {
         return null;
@@ -146,11 +186,14 @@ public class CallForegroundService extends Service {
             NotificationChannel channel = new NotificationChannel(
                 CHANNEL_ID,
                 "Panggilan LiteMeet",
-                NotificationManager.IMPORTANCE_HIGH
+                NotificationManager.IMPORTANCE_LOW  // LOW = no sound, no heads-up, tapi tetap visible
             );
             channel.setDescription("Notifikasi panggilan aktif LiteMeet");
-            channel.setSound(null, null);
+            channel.setSound(null, null);       // Silent
+            channel.enableVibration(false);      // Tidak getar
+            channel.enableLights(false);         // Tidak kedip LED
             channel.setShowBadge(false);
+            channel.setLockscreenVisibility(Notification.VISIBILITY_PUBLIC);
             NotificationManager manager = getSystemService(NotificationManager.class);
             if (manager != null) manager.createNotificationChannel(channel);
         }

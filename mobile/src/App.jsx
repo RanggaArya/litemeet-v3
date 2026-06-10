@@ -17,6 +17,7 @@ const StealthContext = createContext({ stealthCamOn: false, stealthMicOn: false,
 
 // Capacitor plugin bridge untuk ForegroundService native
 const ForegroundCall = registerPlugin('ForegroundCall');
+const AudioRoute = registerPlugin('AudioRoute');
 const isAndroid = () => typeof window !== 'undefined' && window.Capacitor?.getPlatform() === 'android';
 
 // ============ NOTIFICATION SOUNDS (like Google Meet) ============
@@ -385,6 +386,7 @@ function MeetingView({ myName, myPhotoURL, bandwidthMode, setBandwidthMode, part
   const [recordingDuration, setRecordingDuration] = useState(0);
   const [isPipMode, setIsPipMode] = useState(false);
   const [gridMode, setGridMode] = useState('grid'); // 'grid' (2x2) or 'stack' (atas-bawah)
+  const [isSpeakerOn, setIsSpeakerOn] = useState(false); // false = earpiece, true = loudspeaker
   
   const connectionState = useConnectionState();
   const mediaRecorderRef = useRef(null);
@@ -691,7 +693,10 @@ function MeetingView({ myName, myPhotoURL, bandwidthMode, setBandwidthMode, part
   const leave = () => {
     if (isRecording) stopRecording();
     if (saveMeetingToHistory) saveMeetingToHistory(true);
-    if (isAndroid()) ForegroundCall.stopCall().catch(()=>{});
+    if (isAndroid()) {
+      ForegroundCall.stopCall().catch(()=>{});
+      AudioRoute.disableCallMode().catch(()=>{});
+    }
     if (onLeave) onLeave();
     room.disconnect();
   };
@@ -841,6 +846,11 @@ function MeetingView({ myName, myPhotoURL, bandwidthMode, setBandwidthMode, part
           <button className={`more-menu-item ${gridMode === 'stack' ? 'active' : ''}`} onClick={(e) => { e.stopPropagation(); const newMode = gridMode === 'grid' ? 'stack' : 'grid'; setGridMode(newMode); addToast(newMode === 'grid' ? '⊞ Grid 2x2' : '☰ Stack Atas-Bawah', 'success'); setShowMore(false); }}>
             <span className="icon">{gridMode === 'grid' ? '☰' : '⊞'}</span><span>{gridMode === 'grid' ? 'Layout Stack' : 'Layout Grid'}</span>
           </button>
+          {isAndroid() && (
+            <button className={`more-menu-item ${isSpeakerOn ? 'active' : ''}`} onClick={async (e) => { e.stopPropagation(); try { const res = await AudioRoute.toggleSpeaker(); setIsSpeakerOn(res.speakerOn); addToast(res.speakerOn ? '🔊 Speaker Aktif' : '📱 Earpiece Aktif', 'success'); } catch(err) { console.warn('Toggle speaker:', err); } setShowMore(false); }}>
+              <span className="icon">{isSpeakerOn ? '📱' : '🔊'}</span><span>{isSpeakerOn ? 'Earpiece' : 'Speaker'}</span>
+            </button>
+          )}
           {isAdmin && (
             <button className="more-menu-item" onClick={(e) => { e.stopPropagation(); setShowAdminRoom(true); setShowMore(false); }}>
               <span className="icon">🔧</span><span>Admin Panel</span>
@@ -1193,7 +1203,8 @@ export default function App() {
         saveLastUser(room, name);
         if (isAndroid()) { 
           ForegroundCall.requestPermissions().catch(e => console.warn('Perms req:', e));
-          ForegroundCall.startCall({ roomName: room }).catch(e => console.warn('FG service:', e)); 
+          ForegroundCall.startCall({ roomName: room }).catch(e => console.warn('FG service:', e));
+          AudioRoute.enableCallMode().then(res => { if (res) setIsSpeakerOn(!!res.speakerOn); }).catch(e => console.warn('Audio route:', e));
         }
       } else { setConnectionError(data.error || 'Gagal mendapatkan token.'); }
     } catch (e) { 
@@ -1218,7 +1229,10 @@ export default function App() {
   useEffect(() => { joinRoomRef.current = joinRoom; });
 
   const handleDisconnected = useCallback(async () => {
-    if (isAndroid()) ForegroundCall.stopCall().catch(e => console.warn('Stop FG service:', e));
+    if (isAndroid()) {
+      ForegroundCall.stopCall().catch(e => console.warn('Stop FG service:', e));
+      AudioRoute.disableCallMode().catch(e => console.warn('Disable call mode:', e));
+    }
     if (userLeftRef.current) { setJoined(false); setToken(''); setServerUrl(''); return; }
     
     if (retryCountRef.current < MAX_RETRIES) {

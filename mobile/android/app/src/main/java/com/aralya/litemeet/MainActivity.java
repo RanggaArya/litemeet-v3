@@ -17,11 +17,12 @@ public class MainActivity extends BridgeActivity {
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
-        // Daftarkan plugin ForegroundCall SEBELUM super.onCreate
+        // Daftarkan plugin SEBELUM super.onCreate
         try {
             registerPlugin(ForegroundCallPlugin.class);
+            registerPlugin(AudioRoutePlugin.class);
         } catch (Exception e) {
-            Log.w(TAG, "Failed to register ForegroundCallPlugin: " + e.getMessage());
+            Log.w(TAG, "Failed to register plugins: " + e.getMessage());
         }
         super.onCreate(savedInstanceState);
         // Cek jika app dibuka oleh "Akhiri" dari notifikasi
