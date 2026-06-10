@@ -469,17 +469,16 @@ export default function Home() {
   }, []);
 
   // Pre-warm the Vercel token API serverless function so it boots up while user is reading the lobby
+  // ⚡ Dipanggil SEKALI saat mount — bukan bergantung pada joined/authScreen
   useEffect(() => {
-    if (!joined && !authScreen) {
-      const isElectron = typeof window !== 'undefined' && window.electronAPI;
-      const apiUrl = isElectron ? 'https://litemeet-v3.vercel.app/api/token' : '/api/token';
-      fetch(apiUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ warmup: true })
-      }).catch(() => {}); // ignore errors silently
-    }
-  }, [joined, authScreen]);
+    const isElectron = typeof window !== 'undefined' && window.electronAPI;
+    const apiUrl = isElectron ? 'https://litemeet-v3.vercel.app/api/token' : '/api/token';
+    fetch(apiUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ warmup: true })
+    }).catch(() => {}); // silent — hanya untuk wake up serverless
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const removeHistoryEntry = (e, id) => {
     e.stopPropagation();
@@ -550,9 +549,9 @@ export default function Home() {
         } catch (e) {}
       }
 
-      // Add timeout to prevent hanging on slow networks
+      // ⚡ Timeout dikurangi 15s → 8s agar retry lebih cepat jika server tidak merespons
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 15000);
+      const timeoutId = setTimeout(() => controller.abort(), 8000);
 
       const resp = await fetch(apiUrl, {
         method: 'POST',

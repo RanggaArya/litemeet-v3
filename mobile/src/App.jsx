@@ -1152,16 +1152,14 @@ export default function App() {
     } catch {}
   }, []);
 
-  // Pre-warm token API
+  // ⚡ Pre-warm token API — sekali saat mount
   useEffect(() => {
-    if (!joined && !authScreen) {
-      fetch(`${API_BASE}/api/token`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ warmup: true })
-      }).catch(() => {});
-    }
-  }, [joined, authScreen]);
+    fetch(`${API_BASE}/api/token`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ warmup: true })
+    }).catch(() => {});
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     const t = setInterval(() => setCurrentTime(new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })), 1000);
@@ -1181,7 +1179,7 @@ export default function App() {
     setInitialRole('participant'); // Reset before fetching
     
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 15000); // 15 detik timeout
+    const timeoutId = setTimeout(() => controller.abort(), 8000); // ⚡ 8 detik (dari 15s)
     
     try {
       const actualRoomName = password ? `${room}___${password}` : room;
