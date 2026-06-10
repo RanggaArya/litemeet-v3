@@ -248,7 +248,8 @@ function DraggablePip({ trackRef, onTap, isPipMode }) {
 
 // ============ GROUP GRID LAYOUT (3+ peserta) ============
 // Grid 2 kolom seperti WhatsApp / Google Meet mobile
-function GroupGridLayout({ tracks }) {
+// gridMode: 'grid' (2x2) atau 'stack' (2 baris atas-bawah)
+function GroupGridLayout({ tracks, gridMode = 'grid' }) {
   const gridTracks = useMemo(() => {
     const seen = new Set();
     const cameraOnly = tracks.filter((t) => {
@@ -270,6 +271,22 @@ function GroupGridLayout({ tracks }) {
   const count = gridTracks.length;
   const isLastOdd = count % 2 !== 0;
 
+  // Stack mode: 2 baris vertikal, masing-masing penuh lebar
+  if (gridMode === 'stack') {
+    return (
+      <div className="group-stack-layout">
+        {gridTracks.map((track, i) => (
+          <div
+            key={track.participant?.sid || i}
+            className="group-stack-cell"
+          >
+            <MyParticipantTile trackRef={track} />
+          </div>
+        ))}
+      </div>
+    );
+  }
+
   return (
     <div className={`group-grid-layout count-${Math.min(count, 9)}`}>
       {gridTracks.map((track, i) => {
@@ -289,7 +306,7 @@ function GroupGridLayout({ tracks }) {
 
 // ============ SMART VIDEO LAYOUT ============
 // Custom mobile-optimized layout
-function SmartVideoLayout({ tracks, remoteCount, isPipMode }) {
+function SmartVideoLayout({ tracks, remoteCount, isPipMode, gridMode = 'grid' }) {
   const [swapped, setSwapped] = useState(false);
   const totalPeople = remoteCount + 1;
 
@@ -320,7 +337,7 @@ function SmartVideoLayout({ tracks, remoteCount, isPipMode }) {
         </div>
       );
     }
-    return <GroupGridLayout tracks={tracks} />;
+    return <GroupGridLayout tracks={tracks} gridMode={gridMode} />;
   }
 
   const localTrackRaw = tracks.find(t => t.participant?.isLocal && (t.source === Track.Source.Camera || t.publication?.source === Track.Source.Camera));
@@ -367,6 +384,7 @@ function MeetingView({ myName, myPhotoURL, bandwidthMode, setBandwidthMode, part
   const [isRecording, setIsRecording] = useState(false);
   const [recordingDuration, setRecordingDuration] = useState(0);
   const [isPipMode, setIsPipMode] = useState(false);
+  const [gridMode, setGridMode] = useState('grid'); // 'grid' (2x2) or 'stack' (atas-bawah)
   
   const connectionState = useConnectionState();
   const mediaRecorderRef = useRef(null);
@@ -728,7 +746,7 @@ function MeetingView({ myName, myPhotoURL, bandwidthMode, setBandwidthMode, part
     return (
       <StealthContext.Provider value={{ stealthCamOn, stealthMicOn, myName, myPhotoURL }}>
         <div className="meeting-room pip-active">
-          <SmartVideoLayout tracks={allTracks} remoteCount={filteredRemoteParticipants.length} isPipMode={true} />
+          <SmartVideoLayout tracks={allTracks} remoteCount={filteredRemoteParticipants.length} isPipMode={true} gridMode={gridMode} />
         </div>
       </StealthContext.Provider>
     );
@@ -777,7 +795,7 @@ function MeetingView({ myName, myPhotoURL, bandwidthMode, setBandwidthMode, part
             </p>
           </div>
         ) : (
-          <SmartVideoLayout tracks={allTracks} remoteCount={filteredRemoteParticipants.length} isPipMode={false} />
+          <SmartVideoLayout tracks={allTracks} remoteCount={filteredRemoteParticipants.length} isPipMode={false} gridMode={gridMode} />
         )}
       </div>
 
@@ -819,6 +837,9 @@ function MeetingView({ myName, myPhotoURL, bandwidthMode, setBandwidthMode, part
             addToast(newMode === 'saver' ? '🌿 Mode Hemat aktif' : newMode === 'hd' ? '🎬 Mode HD aktif' : '🎥 Mode Ultra aktif', 'success');
           }}>
             <span className="icon">📶</span><span>{bandwidthMode === 'saver' ? 'Switch ke HD' : bandwidthMode === 'hd' ? 'Switch ke Ultra' : 'Switch ke Hemat'}</span>
+          </button>
+          <button className={`more-menu-item ${gridMode === 'stack' ? 'active' : ''}`} onClick={(e) => { e.stopPropagation(); const newMode = gridMode === 'grid' ? 'stack' : 'grid'; setGridMode(newMode); addToast(newMode === 'grid' ? '⊞ Grid 2x2' : '☰ Stack Atas-Bawah', 'success'); setShowMore(false); }}>
+            <span className="icon">{gridMode === 'grid' ? '☰' : '⊞'}</span><span>{gridMode === 'grid' ? 'Layout Stack' : 'Layout Grid'}</span>
           </button>
           {isAdmin && (
             <button className="more-menu-item" onClick={(e) => { e.stopPropagation(); setShowAdminRoom(true); setShowMore(false); }}>
@@ -1453,6 +1474,7 @@ export default function App() {
   return (
     <LiveKitRoom key={roomKey} video={true} audio={true} token={token} serverUrl={serverUrl} data-lk-theme="default" style={{ height: '100dvh', background: '#030712' }} onDisconnected={handleDisconnected} options={roomOptions}>
       <MeetingView myName={name} myPhotoURL={photoURL} bandwidthMode={bandwidthMode} setBandwidthMode={setBandwidthMode} participantsRef={participantsRef} saveMeetingToHistory={saveMeetingToHistory} onLeave={() => { userLeftRef.current = true; }} initialRole={initialRole} initialStatus={initialStatus} />
+      <RoomAudioRenderer />
     </LiveKitRoom>
   );
 }

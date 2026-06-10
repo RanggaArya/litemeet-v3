@@ -190,6 +190,15 @@ body {
   position: relative;
   overflow: hidden;
   background: #000;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.video-area > * {
+  flex: 1;
+  min-height: 0;
+  width: 100%;
 }
 
 .video-area [data-lk-theme="default"] {
@@ -569,6 +578,8 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
+  /* Prevent layout shift on track dimension changes */
+  contain: layout;
 }
 
 .spotlight-main .lk-participant-tile {
@@ -579,6 +590,11 @@ body {
 
 .spotlight-main .lk-participant-tile video {
   object-fit: cover !important;
+  /* Smooth transitions to prevent resize flicker */
+  transition: width 0.3s ease, height 0.3s ease;
+  /* Stabilize dimensions */
+  min-width: 100%;
+  min-height: 100%;
 }
 
 /* PiP video kecil pojok kanan atas (self video overlay) */
@@ -671,4 +687,182 @@ body {
 .lk-focus-layout {
   padding: 4px !important;
   gap: 4px !important;
+}
+
+/* ============ GROUP GRID LAYOUT (3+ peserta) ============ */
+.group-grid-layout {
+  width: 100%;
+  height: 100%;
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 6px;
+  padding: 8px;
+  box-sizing: border-box;
+  background: #030712;
+  overflow: hidden;
+  /* Center grid items both horizontally and vertically */
+  place-content: center;
+  place-items: center;
+}
+
+/* Baris grid disesuaikan jumlah peserta agar tile proporsional */
+.group-grid-layout.count-3,
+.group-grid-layout.count-4 {
+  grid-template-rows: repeat(2, 1fr);
+}
+
+.group-grid-layout.count-5,
+.group-grid-layout.count-6 {
+  grid-template-rows: repeat(3, 1fr);
+}
+
+.group-grid-layout.count-7,
+.group-grid-layout.count-8,
+.group-grid-layout.count-9 {
+  grid-template-rows: repeat(4, 1fr);
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  align-content: start;
+}
+
+.group-grid-cell {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  min-width: 0;
+  border-radius: 12px;
+  overflow: hidden;
+  background: #111827;
+  /* Force 16:9 aspect ratio and center content */
+  aspect-ratio: 16/9;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Peserta ganjil terakhir: tile sama lebar, di tengah baris bawah */
+.group-grid-cell--solo {
+  grid-column: 1 / -1;
+  width: calc(50% - 3px);
+  max-width: calc(50% - 3px);
+  justify-self: center;
+}
+
+.group-grid-layout .lk-participant-tile {
+  width: 100% !important;
+  height: 100% !important;
+  border-radius: 12px !important;
+}
+
+.group-grid-layout .lk-participant-tile video {
+  object-fit: cover !important;
+  background: #111827 !important;
+}
+
+.group-grid-layout .has-avatar img {
+  width: min(55%, 96px) !important;
+  min-width: 64px !important;
+}
+
+/* ============ GROUP STACK LAYOUT (atas-bawah) ============ */
+.group-stack-layout {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px;
+  box-sizing: border-box;
+  background: #030712;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.group-stack-cell {
+  position: relative;
+  width: 100%;
+  flex: 1;
+  min-height: 0;
+  border-radius: 12px;
+  overflow: hidden;
+  background: #111827;
+  /* 16:9 aspect preserved but flexible height */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.group-stack-layout .lk-participant-tile {
+  width: 100% !important;
+  height: 100% !important;
+  border-radius: 12px !important;
+}
+
+.group-stack-layout .lk-participant-tile video {
+  object-fit: cover !important;
+  background: #111827 !important;
+}
+
+/* Screen share + 3+ peserta */
+.screen-share-layout {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  background: #000;
+  overflow: hidden;
+}
+
+.screen-share-main {
+  flex: 1;
+  min-height: 0;
+  position: relative;
+}
+
+.screen-share-main .lk-participant-tile {
+  width: 100% !important;
+  height: 100% !important;
+}
+
+.screen-share-main .lk-participant-tile video {
+  object-fit: contain !important;
+}
+
+.screen-share-strip {
+  flex-shrink: 0;
+  display: flex;
+  gap: 6px;
+  padding: 6px 8px;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  background: rgba(3, 7, 18, 0.95);
+}
+
+.screen-share-strip-cell {
+  flex: 0 0 72px;
+  width: 72px;
+  height: 96px;
+  border-radius: 10px;
+  overflow: hidden;
+  background: #111827;
+}
+
+.screen-share-strip-cell .lk-participant-tile {
+  width: 100% !important;
+  height: 100% !important;
+}
+
+.screen-share-strip-cell .lk-participant-tile video {
+  object-fit: cover !important;
+}
+
+.pip-active .group-grid-layout {
+  padding: 4px;
+  gap: 3px;
+}
+
+.pip-active .group-stack-layout {
+  padding: 4px;
+  gap: 3px;
 }
