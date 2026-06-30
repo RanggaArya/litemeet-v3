@@ -812,17 +812,7 @@ export default function Home() {
   const joinRoomRef = useRef(joinRoom);
   useEffect(() => { joinRoomRef.current = joinRoom; });
 
-  // Expose global force reconnect event
-  useEffect(() => {
-    const onForceReconnect = () => {
-      console.log('[LiteMeet] Handling global force-reconnect event');
-      userInitiatedLeaveRef.current = false;
-      // Triggers the auto-retry loop
-      handleDisconnected();
-    };
-    window.addEventListener('force-reconnect-event', onForceReconnect);
-    return () => window.removeEventListener('force-reconnect-event', onForceReconnect);
-  }, [handleDisconnected]);
+
 
   // Auto-retry on unexpected disconnect — fetch FRESH token on each retry
   const handleDisconnected = useCallback(() => {
@@ -862,6 +852,18 @@ export default function Home() {
       setConnectionError('Koneksi terputus. Silakan coba lagi.');
     }
   }, [saveMeetingToHistory]);
+
+  // Expose global force reconnect event
+  useEffect(() => {
+    const onForceReconnect = () => {
+      console.log('[LiteMeet] Handling global force-reconnect event');
+      userInitiatedLeaveRef.current = false;
+      // Triggers the auto-retry loop
+      handleDisconnected();
+    };
+    window.addEventListener('force-reconnect-event', onForceReconnect);
+    return () => window.removeEventListener('force-reconnect-event', onForceReconnect);
+  }, [handleDisconnected]);
 
   // --- AUTH SCREEN (before lobby) ---
   if (!joined && authScreen && !authLoading) {
