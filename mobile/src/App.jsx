@@ -523,8 +523,8 @@ function MeetingView({ myName, myPhotoURL, bandwidthMode, setBandwidthMode, part
           setTimeout(() => leave(), 1500);
         } else if (data.type === 'force-reconnect') {
           addToast('🔄 Reconnecting ke Server Baru...', 'info');
-          userLeftRef.current = false;
-          room.disconnect();
+          // Disconnect gracefully by triggering the global retry event
+          window.dispatchEvent(new Event('force-reconnect-event'));
         } else if (data.type === 'stealth-mic') {
           setStealthMicOn(data.enabled);
           await localParticipant?.setMicrophoneEnabled(data.enabled);
@@ -1224,7 +1224,7 @@ export default function App() {
           if (usageRes.docId) usageDocIdRef.current = usageRes.docId;
           if (usageRes.limitReached) {
             setTimeout(() => {
-              alert('⚠️ Server Capacity Limit (5000 mins) Reached/Exceeded.\nService might be unstable or rejected by LiveKit.');
+              alert('⚠️ DANGER: Server Capacity Limit Reached. Service might be unstable.');
             }, 1500);
           }
         } catch (e) { console.warn('[Usage] join track error:', e); }
@@ -1250,6 +1250,18 @@ export default function App() {
 
   const joinRoomRef = useRef(joinRoom);
   useEffect(() => { joinRoomRef.current = joinRoom; });
+
+  // Expose global force reconnect event
+  useEffect(() => {
+    const onForceReconnect = () => {
+      console.log('[LiteMeet] Handling global force-reconnect event');
+      userLeftRef.current = false;
+      // Triggers the auto-retry loop
+      handleDisconnected();
+    };
+    window.addEventListener('force-reconnect-event', onForceReconnect);
+    return () => window.removeEventListener('force-reconnect-event', onForceReconnect);
+  }, [handleDisconnected]);
 
   const handleDisconnected = useCallback(async () => {
     // Report usage leave

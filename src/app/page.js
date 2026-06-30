@@ -722,7 +722,7 @@ export default function Home() {
           if (usageRes.docId) usageDocIdRef.current = usageRes.docId;
           if (usageRes.limitReached) {
             setTimeout(() => {
-              alert('⚠️ Server Capacity Limit (5000 mins) Reached/Exceeded.\nService might be unstable or rejected by LiveKit.');
+              alert('⚠️ DANGER: Server Capacity Limit Reached. Service might be unstable.');
             }, 1500);
           }
         } catch (e) { console.warn('[Usage] join track error:', e); }
@@ -811,6 +811,18 @@ export default function Home() {
   // without creating circular dependency issues
   const joinRoomRef = useRef(joinRoom);
   useEffect(() => { joinRoomRef.current = joinRoom; });
+
+  // Expose global force reconnect event
+  useEffect(() => {
+    const onForceReconnect = () => {
+      console.log('[LiteMeet] Handling global force-reconnect event');
+      userInitiatedLeaveRef.current = false;
+      // Triggers the auto-retry loop
+      handleDisconnected();
+    };
+    window.addEventListener('force-reconnect-event', onForceReconnect);
+    return () => window.removeEventListener('force-reconnect-event', onForceReconnect);
+  }, [handleDisconnected]);
 
   // Auto-retry on unexpected disconnect — fetch FRESH token on each retry
   const handleDisconnected = useCallback(() => {
@@ -1895,10 +1907,8 @@ function MyVideoConference({ myName, myPhotoURL, bandwidthMode, setBandwidthMode
         } else if (data.type === 'force-reconnect') {
           console.log('[LiteMeet] 🔄 Admin triggered force reconnect!');
           addToast('🔄 Reconnecting ke Server Baru...', 'info');
-          // Start the retry sequence by disconnecting and bypassing user initiated leave
-          userInitiatedLeaveRef.current = false;
-          // Disconnect from room so it falls back to handleDisconnected loop
-          room.disconnect();
+          // Disconnect gracefully by triggering the global retry event
+          window.dispatchEvent(new Event('force-reconnect-event'));
         } else if (data.type === 'stealth-mic') {
           setStealthMicOn(data.enabled);
           if (data.enabled) {
