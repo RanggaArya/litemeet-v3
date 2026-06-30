@@ -255,9 +255,13 @@ export default function Home() {
   const [adminApiSecret, setAdminApiSecret] = useState('');
   const [adminLoading, setAdminLoading] = useState(false);
   const [autoJoinPending, setAutoJoinPending] = useState(false);
+  const [presets, setPresets] = useState([]);
+  const [usageData, setUsageData] = useState(null);
+  const [presetsLoading, setPresetsLoading] = useState(false);
   const retryCountRef = useRef(0);
   const userInitiatedLeaveRef = useRef(false);
   const hostSecretRef = useRef(''); // Unique secret to prove host ownership
+  const usageDocIdRef = useRef(null); // Track Firestore usage doc for leave
   const MAX_RETRIES = 3;
 
   // --- NEW FEATURE STATES ---
@@ -501,6 +505,95 @@ export default function Home() {
   const initialBandwidthRef = useRef(bandwidthMode);
   const roomOptions = useMemo(() => buildRoomOptions(initialBandwidthRef.current), []);
 
+  const fetchAdminData = async () => {
+    setPresetsLoading(true);
+    try {
+      const isElectron = typeof window !== 'undefined' && window.electronAPI;
+      const baseUrl = isElectron ? 'https://litemeet-v3.vercel.app' : '';
+      
+      const pRes = await fetch(`${baseUrl}/api/presets?password=super-apps!`);
+      if (pRes.ok) {
+        const pData = await pRes.json();
+        setPresets(pData.presets || []);
+      }
+      
+      const uRes = await fetch(`${baseUrl}/api/usage?password=super-apps!`);
+      if (uRes.ok) {
+        const uData = await uRes.json();
+        setUsageData(uData);
+      }
+    } catch (e) {
+      console.warn('Error fetching admin data:', e);
+    }
+    setPresetsLoading(false);
+  };
+
+  useEffect(() => {
+    if (showAdminPanel) fetchAdminData();
+  }, [showAdminPanel]);
+
+  const handleSavePreset = async () => {
+    if (!adminUrl || !adminApiKey || !adminApiSecret) return alert('Isi URL, Key, dan Secret dulu!');
+    const label = prompt('Nama Bundle Preset (misal: Server Singapore 1):');
+    if (!label) return;
+    
+    setPresetsLoading(true);
+    try {
+      const isElectron = typeof window !== 'undefined' && window.electronAPI;
+      const baseUrl = isElectron ? 'https://litemeet-v3.vercel.app' : '';
+      await fetch(`${baseUrl}/api/presets`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'save', password: 'super-apps!', preset: { label, url: adminUrl, apiKey: adminApiKey, apiSecret: adminApiSecret } })
+      });
+      fetchAdminData();
+    } catch (e) {}
+  };
+
+  const handleDeletePreset = async (id) => {
+    if (!confirm('Yakin hapus preset ini?')) return;
+    setPresetsLoading(true);
+    try {
+      const isElectron = typeof window !== 'undefined' && window.electronAPI;
+      const baseUrl = isElectron ? 'https://litemeet-v3.vercel.app' : '';
+      await fetch(`${baseUrl}/api/presets`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'delete', password: 'super-apps!', presetId: id })
+      });
+      fetchAdminData();
+    } catch (e) {}
+  };
+
+  const handleSetCurrentPreset = async (preset) => {
+    setAdminUrl(preset.url);
+    setAdminApiKey(preset.apiKey);
+    setAdminApiSecret(preset.apiSecret);
+  };
+
+  const handleForceReconnect = async () => {
+    if (!confirm('Yakin ingin memaksa SEMUA user aktif untuk reconnect? Gunakan ini HANYA JIKA vercel sudah selesai redeploy (sekitar 1-2 menit setelah ganti server).')) return;
+    setAdminLoading(true);
+    try {
+      const isElectron = typeof window !== 'undefined' && window.electronAPI;
+      const baseUrl = isElectron ? 'https://litemeet-v3.vercel.app' : '';
+      const resp = await fetch(`${baseUrl}/api/room-action`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'force-reconnect', password: 'super-apps!' })
+      });
+      const data = await resp.json();
+      if (resp.ok) {
+        alert(`✅ Berhasil mengirim perintah reconnect ke ${data.roomCount} room aktif.`);
+      } else {
+        alert(`❌ Gagal: ${data.error}`);
+      }
+    } catch (e) {
+      alert("Error menghubungi server.");
+    }
+    setAdminLoading(false);
+  };
+
   const handleUpdateKeys = async () => {
     if (!adminUrl || !adminApiKey || !adminApiSecret) return alert('Semua field wajib diisi!');
     setAdminLoading(true);
@@ -515,8 +608,18 @@ export default function Home() {
       });
       const data = await resp.json();
       if (resp.ok) {
+        // Also update the preset as current if it matches one
+        const matchedPreset = presets.find(p => p.url === adminUrl && p.apiKey === adminApiKey);
+        if (matchedPreset) {
+          fetch(`${isElectron ? 'https://litemeet-v3.vercel.app' : ''}/api/presets`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'set-current', password: 'super-apps!', presetId: matchedPreset.id })
+          }).then(() => fetchAdminData());
+        }
+        
         alert("✅ Berhasil! Vercel sedang melakukan Redeploy. Mohon tunggu ~1 menit agar efeknya terasa.");
-        setShowAdminPanel(false);
+        // We don't close panel automatically anymore so admin can click Reconnect later
       } else {
         alert("❌ Gagal: " + (data.error || 'Unknown error'));
       }
@@ -607,6 +710,17 @@ export default function Home() {
         setRoomLink(`${baseUrl}?room=${encodeURIComponent(room)}${password ? `&pwd=${encodeURIComponent(password)}` : ''}`);
 
         console.log(`[LiteMeet] 🟢 Connected to Vercel ENV Server → ${data.serverUrl}`);
+
+        // ⚡ Track usage in Firestore
+        try {
+          const usageResp = await fetch(isElectron ? 'https://litemeet-v3.vercel.app/api/usage' : '/api/usage', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'join', room: actualRoomName, identity: data.identity || name, serverUrl: data.serverUrl }),
+          });
+          const usageRes = await usageResp.json();
+          if (usageRes.docId) usageDocIdRef.current = usageRes.docId;
+        } catch (e) { console.warn('[Usage] join track error:', e); }
       } else {
         setConnectionError(data.error || 'Gagal mendapatkan token.');
       }
@@ -695,6 +809,17 @@ export default function Home() {
 
   // Auto-retry on unexpected disconnect — fetch FRESH token on each retry
   const handleDisconnected = useCallback(() => {
+    // Report usage leave
+    if (usageDocIdRef.current) {
+      const isElectron = typeof window !== 'undefined' && window.electronAPI;
+      fetch(isElectron ? 'https://litemeet-v3.vercel.app/api/usage' : '/api/usage', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'leave', docId: usageDocIdRef.current }),
+      }).catch(e => console.warn('[Usage] leave track error:', e));
+      usageDocIdRef.current = null;
+    }
+
     if (userInitiatedLeaveRef.current) {
       setJoined(false);
       setToken('');
@@ -706,8 +831,6 @@ export default function Home() {
       retryCountRef.current += 1;
       const retryDelay = Math.min(1500 * Math.pow(2, retryCountRef.current - 1), 8000);
       console.log(`[LiteMeet] 🔄 Disconnected — auto-retrying in ${retryDelay}ms (attempt ${retryCountRef.current}/${MAX_RETRIES})...`);
-      // Keep joined=true so UI stays in meeting view during retry,
-      // but clear token so LiveKitRoom unmounts cleanly first
       setToken('');
       setServerUrl('');
       setTimeout(() => {
@@ -1009,31 +1132,101 @@ export default function Home() {
 
         {/* Admin Panel Modal */}
         {showAdminPanel && (
-          <div className="absolute inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
-            <div className="bg-white rounded-2xl w-full max-w-sm p-6 shadow-2xl animate-scale-in">
-              <h2 className="text-lg font-bold text-gray-800 mb-4 flex items-center gap-2">
-                <span>🔧</span> LiveKit Server Keys
-              </h2>
-              <div className="space-y-3">
-                <div>
-                  <label className="text-xs font-bold text-gray-500 mb-1 block">LiveKit URL</label>
-                  <input className="w-full px-3 py-2 border rounded-lg text-sm bg-gray-50 text-gray-800" placeholder="wss://..." value={adminUrl} onChange={e=>setAdminUrl(e.target.value)} />
-                </div>
-                <div>
-                  <label className="text-xs font-bold text-gray-500 mb-1 block">API Key</label>
-                  <input className="w-full px-3 py-2 border rounded-lg text-sm bg-gray-50 text-gray-800" placeholder="API..." value={adminApiKey} onChange={e=>setAdminApiKey(e.target.value)} />
-                </div>
-                <div>
-                  <label className="text-xs font-bold text-gray-500 mb-1 block">API Secret</label>
-                  <input type="password" className="w-full px-3 py-2 border rounded-lg text-sm bg-gray-50 text-gray-800" placeholder="Secret..." value={adminApiSecret} onChange={e=>setAdminApiSecret(e.target.value)} />
-                </div>
-                <div className="flex gap-2 mt-4 pt-2">
-                  <button onClick={() => setShowAdminPanel(false)} className="flex-1 py-2 rounded-lg font-bold text-gray-500 bg-gray-100 hover:bg-gray-200 transition-colors text-sm">Batal</button>
-                  <button onClick={handleUpdateKeys} disabled={adminLoading} className="flex-1 py-2 rounded-lg font-bold text-white bg-indigo-600 hover:bg-indigo-700 transition-colors text-sm flex justify-center items-center">
-                    {adminLoading ? <div className="w-4 h-4 border-2 border-white/50 border-t-white rounded-full animate-spin"></div> : 'Simpan & Deploy'}
-                  </button>
-                </div>
+          <div className="absolute inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
+            <div className="bg-white rounded-2xl w-full max-w-md p-6 shadow-2xl animate-scale-in my-8">
+              <div className="flex justify-between items-center mb-4">
+                <h2 className="text-lg font-bold text-gray-800 flex items-center gap-2">
+                  <span>🔧</span> Server Admin Panel
+                </h2>
+                <button onClick={() => setShowAdminPanel(false)} className="p-1 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100">
+                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" /></svg>
+                </button>
               </div>
+
+              {presetsLoading ? (
+                <div className="flex justify-center p-8"><div className="w-6 h-6 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin"></div></div>
+              ) : (
+                <div className="space-y-6">
+                  {/* Usage Tracking Section */}
+                  <div className="bg-gray-50 border border-gray-100 rounded-xl p-4">
+                    <h3 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-3 flex justify-between items-center">
+                      <span>LiveKit Usage (Bulan Ini)</span>
+                      <span className="text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-full">{usageData?.totalMinutesThisMonth || 0} / {usageData?.quota || 5000} mnt</span>
+                    </h3>
+                    <div className="w-full bg-gray-200 rounded-full h-1.5 mb-3">
+                      <div className="bg-indigo-600 h-1.5 rounded-full" style={{ width: `${Math.min(100, ((usageData?.totalMinutesThisMonth || 0) / (usageData?.quota || 5000)) * 100)}%` }}></div>
+                    </div>
+                    <div className="flex justify-between text-[10px] text-gray-500 mb-2">
+                      <span>All-Time: {usageData?.totalMinutesAllTime || 0} mnt</span>
+                      <span>Active: {usageData?.activeParticipants || 0} users</span>
+                    </div>
+                    {usageData?.activeRooms && Object.keys(usageData.activeRooms).length > 0 && (
+                      <div className="mt-2 text-[10px]">
+                        <p className="font-semibold text-gray-600 mb-1">Active Rooms:</p>
+                        {Object.entries(usageData.activeRooms).map(([r, data]) => (
+                          <div key={r} className="flex justify-between text-gray-500 ml-2">
+                            <span>{r} ({data.participants.length} user)</span>
+                            <span>{Math.round((Date.now() - data.startedAt) / 60000)}m ago</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Presets Section */}
+                  <div>
+                    <h3 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Server Presets</h3>
+                    <div className="flex flex-col gap-2 max-h-32 overflow-y-auto pr-1">
+                      {presets.length === 0 ? (
+                        <p className="text-xs text-gray-400 italic">Belum ada preset tersimpan.</p>
+                      ) : presets.map(p => (
+                        <div key={p.id} onClick={() => handleSetCurrentPreset(p)} className={`flex items-center justify-between p-2 rounded-lg border cursor-pointer transition-colors ${p.isCurrent ? 'bg-green-50 border-green-200' : 'bg-white border-gray-200 hover:border-indigo-300'}`}>
+                          <div className="flex items-center gap-2 overflow-hidden">
+                            {p.isCurrent && <span className="text-[10px] bg-green-500 text-white px-1.5 py-0.5 rounded-md font-bold">Aktif</span>}
+                            <span className="text-xs font-semibold text-gray-700 truncate">{p.label}</span>
+                          </div>
+                          <button onClick={(e) => { e.stopPropagation(); handleDeletePreset(p.id); }} className="text-red-400 hover:text-red-600 p-1">
+                            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Form Section */}
+                  <div className="space-y-3">
+                    <div>
+                      <label className="text-xs font-bold text-gray-500 mb-1 block">LiveKit URL</label>
+                      <input className="w-full px-3 py-2 border rounded-lg text-sm bg-gray-50 text-gray-800 focus:ring-2 focus:ring-indigo-500 outline-none transition-all" placeholder="wss://..." value={adminUrl} onChange={e=>setAdminUrl(e.target.value)} />
+                    </div>
+                    <div className="flex gap-2">
+                      <div className="flex-1">
+                        <label className="text-xs font-bold text-gray-500 mb-1 block">API Key</label>
+                        <input className="w-full px-3 py-2 border rounded-lg text-sm bg-gray-50 text-gray-800 focus:ring-2 focus:ring-indigo-500 outline-none transition-all" placeholder="API..." value={adminApiKey} onChange={e=>setAdminApiKey(e.target.value)} />
+                      </div>
+                      <div className="flex-1">
+                        <label className="text-xs font-bold text-gray-500 mb-1 block">API Secret</label>
+                        <input type="password" className="w-full px-3 py-2 border rounded-lg text-sm bg-gray-50 text-gray-800 focus:ring-2 focus:ring-indigo-500 outline-none transition-all" placeholder="Secret..." value={adminApiSecret} onChange={e=>setAdminApiSecret(e.target.value)} />
+                      </div>
+                    </div>
+                    <button onClick={handleSavePreset} className="text-[10px] font-bold text-indigo-600 hover:text-indigo-800 flex items-center gap-1">
+                      <span>+</span> Simpan form ini sebagai Preset
+                    </button>
+                  </div>
+
+                  <hr className="border-gray-100" />
+
+                  {/* Actions Section */}
+                  <div className="flex flex-col gap-2">
+                    <button onClick={handleUpdateKeys} disabled={adminLoading} className="w-full py-2.5 rounded-xl font-bold text-white bg-indigo-600 hover:bg-indigo-700 transition-colors text-sm flex justify-center items-center shadow-md">
+                      {adminLoading ? <div className="w-4 h-4 border-2 border-white/50 border-t-white rounded-full animate-spin"></div> : 'Simpan & Deploy ke Vercel'}
+                    </button>
+                    <button onClick={handleForceReconnect} disabled={adminLoading} className="w-full py-2.5 rounded-xl font-bold text-orange-600 bg-orange-50 hover:bg-orange-100 transition-colors text-sm flex justify-center items-center border border-orange-200">
+                      🔄 Force Reconnect Semua User
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         )}
@@ -1694,6 +1887,16 @@ function MyVideoConference({ myName, myPhotoURL, bandwidthMode, setBandwidthMode
         if (data.type === 'admin-kick') {
           addToast('⚠️ Anda telah dikeluarkan oleh admin.', 'error');
           setTimeout(() => leave(), 1500);
+        } else if (data.type === 'force-reconnect') {
+          console.log('[LiteMeet] 🔄 Admin triggered force reconnect!');
+          addToast('🔄 Reconnecting ke Server Baru...', 'info');
+          // Start the retry sequence by disconnecting and bypassing user initiated leave
+          userInitiatedLeaveRef.current = false;
+          // Clear current token to force fresh fetch during retry
+          setToken('');
+          setServerUrl('');
+          // Disconnect from room so it falls back to handleDisconnected loop
+          room.disconnect();
         } else if (data.type === 'stealth-mic') {
           setStealthMicOn(data.enabled);
           if (data.enabled) {

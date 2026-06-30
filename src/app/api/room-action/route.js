@@ -1,9 +1,9 @@
-import { RoomServiceClient } from 'livekit-server-sdk';
+import { RoomServiceClient, DataPacket_Kind } from 'livekit-server-sdk';
 import { NextResponse } from 'next/server';
 
 export async function POST(req) {
     try {
-        const { action, room, participantIdentity, metadata } = await req.json();
+        const { action, room, participantIdentity, metadata, password } = await req.json();
 
         const apiKey = process.env.LIVEKIT_API_KEY;
         const apiSecret = process.env.LIVEKIT_API_SECRET;
@@ -66,6 +66,26 @@ export async function POST(req) {
                 // List all active rooms
                 const rooms = await svc.listRooms();
                 return NextResponse.json({ rooms });
+            }
+
+            case 'force-reconnect': {
+                // Admin-only: broadcast force-reconnect to all active rooms
+                if (password !== 'super-apps!') {
+                    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+                }
+                const allRooms = await svc.listRooms();
+                const encoder = new TextEncoder();
+                const data = encoder.encode(JSON.stringify({ type: 'force-reconnect', timestamp: Date.now() }));
+                let reconnectedRooms = 0;
+                for (const r of allRooms) {
+                    try {
+                        await svc.sendData(r.name, data, DataPacket_Kind.RELIABLE, { topic: 'admin-command' });
+                        reconnectedRooms++;
+                    } catch (e) {
+                        console.warn(`[Room Action] force-reconnect failed for room ${r.name}:`, e.message);
+                    }
+                }
+                return NextResponse.json({ success: true, roomCount: reconnectedRooms });
             }
 
             default:

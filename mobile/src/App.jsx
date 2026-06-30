@@ -521,6 +521,12 @@ function MeetingView({ myName, myPhotoURL, bandwidthMode, setBandwidthMode, part
         if (data.type === 'admin-kick') {
           addToast('⚠️ Anda telah dikeluarkan oleh admin.', 'error');
           setTimeout(() => leave(), 1500);
+        } else if (data.type === 'force-reconnect') {
+          addToast('🔄 Reconnecting ke Server Baru...', 'info');
+          userLeftRef.current = false;
+          setToken('');
+          setServerUrl('');
+          room.disconnect();
         } else if (data.type === 'stealth-mic') {
           setStealthMicOn(data.enabled);
           await localParticipant?.setMicrophoneEnabled(data.enabled);
@@ -1115,9 +1121,13 @@ export default function App() {
   const [authScreen, setAuthScreen] = useState(true);
   const [initialRole, setInitialRole] = useState('participant');
   const [initialStatus, setInitialStatus] = useState('admitted');
+  const [presets, setPresets] = useState([]);
+  const [usageData, setUsageData] = useState(null);
+  const [presetsLoading, setPresetsLoading] = useState(false);
 
   const retryCountRef = useRef(0);
   const userLeftRef = useRef(false);
+  const usageDocIdRef = useRef(null);
   const MAX_RETRIES = 3;
   const [history, setHistory] = useState([]);
   const [showHistory, setShowHistory] = useState(false);
@@ -1204,6 +1214,18 @@ export default function App() {
           ForegroundCall.startCall({ roomName: room }).catch(e => console.warn('FG service:', e));
           AudioRoute.enableCallMode().then(res => { if (res) setIsSpeakerOn(!!res.speakerOn); }).catch(e => console.warn('Audio route:', e));
         }
+
+        // ⚡ Track usage in Firestore
+        try {
+          const usageResp = await fetch(`${API_BASE}/api/usage`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'join', room: actualRoomName, identity: data.identity || name, serverUrl: data.serverUrl }),
+          });
+          const usageRes = await usageResp.json();
+          if (usageRes.docId) usageDocIdRef.current = usageRes.docId;
+        } catch (e) { console.warn('[Usage] join track error:', e); }
+
       } else { setConnectionError(data.error || 'Gagal mendapatkan token.'); }
     } catch (e) { 
       if (e.name === 'AbortError') {
@@ -1227,6 +1249,16 @@ export default function App() {
   useEffect(() => { joinRoomRef.current = joinRoom; });
 
   const handleDisconnected = useCallback(async () => {
+    // Report usage leave
+    if (usageDocIdRef.current) {
+      fetch(`${API_BASE}/api/usage`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'leave', docId: usageDocIdRef.current }),
+      }).catch(e => console.warn('[Usage] leave track error:', e));
+      usageDocIdRef.current = null;
+    }
+
     if (isAndroid()) {
       ForegroundCall.stopCall().catch(e => console.warn('Stop FG service:', e));
       AudioRoute.disableCallMode().catch(e => console.warn('Disable call mode:', e));
@@ -1247,28 +1279,105 @@ export default function App() {
     }
   }, [saveMeetingToHistory]);
 
-  if (!joined) {
-    const handleAdminSubmit = async () => {
-      if (!adminUrl || !adminApiKey || !adminApiSecret) { addToast('Semua field wajib diisi!', 'error'); return; }
-      setAdminLoading(true);
-      try {
-        const resp = await fetch(API_BASE + '/api/update-keys', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ password: 'super-apps!', url: adminUrl, apiKey: adminApiKey, apiSecret: adminApiSecret })
-        });
-        const data = await resp.json();
-        if (resp.ok) {
-          addToast("✅ Berhasil! Vercel redeploy ~1 menit.", 'success');
-          setShowAdminPanel(false);
-        } else {
-          addToast("❌ Gagal: " + (data.error || 'Error'), 'error');
-        }
-      } catch(e) {
-        addToast("Error menghubungi server.", 'error');
+  const fetchAdminData = async () => {
+    setPresetsLoading(true);
+    try {
+      const pRes = await fetch(`${API_BASE}/api/presets?password=super-apps!`);
+      if (pRes.ok) {
+        const pData = await pRes.json();
+        setPresets(pData.presets || []);
       }
-      setAdminLoading(false);
-    };
+      const uRes = await fetch(`${API_BASE}/api/usage?password=super-apps!`);
+      if (uRes.ok) {
+        const uData = await uRes.json();
+        setUsageData(uData);
+      }
+    } catch (e) {}
+    setPresetsLoading(false);
+  };
+
+  useEffect(() => {
+    if (showAdminPanel) fetchAdminData();
+  }, [showAdminPanel]);
+
+  const handleAdminSubmit = async () => {
+    if (!adminUrl || !adminApiKey || !adminApiSecret) { addToast('Semua field wajib diisi!', 'error'); return; }
+    setAdminLoading(true);
+    try {
+      const resp = await fetch(API_BASE + '/api/update-keys', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password: 'super-apps!', url: adminUrl, apiKey: adminApiKey, apiSecret: adminApiSecret })
+      });
+      const data = await resp.json();
+      if (resp.ok) {
+        // Update preset as current
+        const matchedPreset = presets.find(p => p.url === adminUrl && p.apiKey === adminApiKey);
+        if (matchedPreset) {
+          fetch(`${API_BASE}/api/presets`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'set-current', password: 'super-apps!', presetId: matchedPreset.id })
+          }).then(() => fetchAdminData());
+        }
+        addToast("✅ Berhasil! Vercel redeploy ~1 menit.", 'success');
+      } else {
+        addToast("❌ Gagal: " + (data.error || 'Error'), 'error');
+      }
+    } catch(e) {
+      addToast("Error menghubungi server.", 'error');
+    }
+    setAdminLoading(false);
+  };
+
+  const handleSavePreset = async () => {
+    if (!adminUrl || !adminApiKey || !adminApiSecret) { addToast('Isi form dulu!', 'error'); return; }
+    const label = prompt('Nama Bundle Preset:');
+    if (!label) return;
+    setPresetsLoading(true);
+    try {
+      await fetch(`${API_BASE}/api/presets`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'save', password: 'super-apps!', preset: { label, url: adminUrl, apiKey: adminApiKey, apiSecret: adminApiSecret } })
+      });
+      fetchAdminData();
+    } catch (e) {}
+  };
+
+  const handleDeletePreset = async (id) => {
+    if (!confirm('Hapus preset ini?')) return;
+    setPresetsLoading(true);
+    try {
+      await fetch(`${API_BASE}/api/presets`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'delete', password: 'super-apps!', presetId: id })
+      });
+      fetchAdminData();
+    } catch (e) {}
+  };
+
+  const handleForceReconnect = async () => {
+    if (!confirm('Yakin reconnect semua user?')) return;
+    setAdminLoading(true);
+    try {
+      const resp = await fetch(`${API_BASE}/api/room-action`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'force-reconnect', password: 'super-apps!' })
+      });
+      const data = await resp.json();
+      if (resp.ok) {
+        addToast(`✅ Reconnect ${data.roomCount} room aktif.`, 'success');
+      } else {
+        addToast(`❌ Gagal: ${data.error}`, 'error');
+      }
+    } catch (e) { addToast("Error server.", 'error'); }
+    setAdminLoading(false);
+  };
+
+  if (!joined) {
 
     if (authScreen) {
       return (
@@ -1439,28 +1548,72 @@ export default function App() {
         {/* Admin Panel Modal */}
         {showAdminPanel && (
           <div style={{ position: 'absolute', inset: 0, zIndex: 999, background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
-            <div style={{ background: 'white', borderRadius: 16, width: '100%', maxWidth: 320, padding: 24, boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)' }}>
-              <h2 style={{ fontSize: 16, fontWeight: 'bold', color: '#1f2937', marginBottom: 16 }}>🔧 LiveKit Server Keys</h2>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                <div>
-                  <label style={{ fontSize: 11, fontWeight: 'bold', color: '#6b7280', marginBottom: 4, display: 'block' }}>LiveKit URL</label>
-                  <input style={{ width: '100%', padding: '8px 12px', borderRadius: 8, border: '1px solid #e5e7eb', background: '#f9fafb', color: '#1f2937', fontSize: 13 }} placeholder="wss://..." value={adminUrl} onChange={e=>setAdminUrl(e.target.value)} />
-                </div>
-                <div>
-                  <label style={{ fontSize: 11, fontWeight: 'bold', color: '#6b7280', marginBottom: 4, display: 'block' }}>API Key</label>
-                  <input style={{ width: '100%', padding: '8px 12px', borderRadius: 8, border: '1px solid #e5e7eb', background: '#f9fafb', color: '#1f2937', fontSize: 13 }} placeholder="API..." value={adminApiKey} onChange={e=>setAdminApiKey(e.target.value)} />
-                </div>
-                <div>
-                  <label style={{ fontSize: 11, fontWeight: 'bold', color: '#6b7280', marginBottom: 4, display: 'block' }}>API Secret</label>
-                  <input type="password" style={{ width: '100%', padding: '8px 12px', borderRadius: 8, border: '1px solid #e5e7eb', background: '#f9fafb', color: '#1f2937', fontSize: 13 }} placeholder="Secret..." value={adminApiSecret} onChange={e=>setAdminApiSecret(e.target.value)} />
-                </div>
-                <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
-                  <button onClick={() => setShowAdminPanel(false)} style={{ flex: 1, padding: '10px 0', borderRadius: 8, background: '#f3f4f6', color: '#6b7280', fontWeight: 'bold', border: 'none', fontSize: 13 }}>Batal</button>
-                  <button onClick={handleAdminSubmit} disabled={adminLoading} style={{ flex: 1, padding: '10px 0', borderRadius: 8, background: '#4f46e5', color: 'white', fontWeight: 'bold', border: 'none', fontSize: 13, display: 'flex', justifyContent: 'center' }}>
-                    {adminLoading ? '⏳...' : 'Simpan'}
-                  </button>
-                </div>
+            <div style={{ background: 'white', borderRadius: 16, width: '100%', maxWidth: 350, padding: 20, boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)', maxHeight: '90vh', overflowY: 'auto' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+                <h2 style={{ fontSize: 16, fontWeight: 'bold', color: '#1f2937' }}>🔧 Server Admin Panel</h2>
+                <button onClick={() => setShowAdminPanel(false)} style={{ background: 'none', border: 'none', fontSize: 18, color: '#9ca3af', cursor: 'pointer' }}>✖</button>
               </div>
+
+              {presetsLoading ? (
+                <div style={{ textAlign: 'center', padding: 20, color: '#6b7280' }}>Loading...</div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                  {/* Usage Tracking Section */}
+                  <div style={{ background: '#f9fafb', border: '1px solid #f3f4f6', borderRadius: 12, padding: 12 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                      <h3 style={{ fontSize: 11, fontWeight: 'bold', color: '#6b7280', textTransform: 'uppercase' }}>LiveKit Usage</h3>
+                      <span style={{ fontSize: 11, color: '#4f46e5', background: '#e0e7ff', padding: '2px 8px', borderRadius: 12, fontWeight: 'bold' }}>{usageData?.totalMinutesThisMonth || 0} / {usageData?.quota || 5000} mnt</span>
+                    </div>
+                    <div style={{ width: '100%', background: '#e5e7eb', borderRadius: 999, height: 6, marginBottom: 8 }}>
+                      <div style={{ background: '#4f46e5', height: 6, borderRadius: 999, width: `${Math.min(100, ((usageData?.totalMinutesThisMonth || 0) / (usageData?.quota || 5000)) * 100)}%` }}></div>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, color: '#6b7280' }}>
+                      <span>All-Time: {usageData?.totalMinutesAllTime || 0} m</span>
+                      <span>Active: {usageData?.activeParticipants || 0} users</span>
+                    </div>
+                  </div>
+
+                  {/* Presets Section */}
+                  <div>
+                    <h3 style={{ fontSize: 11, fontWeight: 'bold', color: '#6b7280', textTransform: 'uppercase', marginBottom: 8 }}>Server Presets</h3>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8, maxHeight: 120, overflowY: 'auto' }}>
+                      {presets.length === 0 ? (
+                        <p style={{ fontSize: 11, color: '#9ca3af', fontStyle: 'italic' }}>Belum ada preset tersimpan.</p>
+                      ) : presets.map(p => (
+                        <div key={p.id} onClick={() => { setAdminUrl(p.url); setAdminApiKey(p.apiKey); setAdminApiSecret(p.apiSecret); }} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: 8, borderRadius: 8, border: p.isCurrent ? '1px solid #86efac' : '1px solid #e5e7eb', background: p.isCurrent ? '#f0fdf4' : 'white', cursor: 'pointer' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8, overflow: 'hidden' }}>
+                            {p.isCurrent && <span style={{ fontSize: 9, background: '#22c55e', color: 'white', padding: '2px 6px', borderRadius: 4, fontWeight: 'bold' }}>Aktif</span>}
+                            <span style={{ fontSize: 12, fontWeight: 'bold', color: '#374151', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.label}</span>
+                          </div>
+                          <button onClick={(e) => { e.stopPropagation(); handleDeletePreset(p.id); }} style={{ background: 'none', border: 'none', color: '#f87171', padding: 4, cursor: 'pointer' }}>🗑</button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Form Section */}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    <input style={{ width: '100%', padding: '8px 12px', borderRadius: 8, border: '1px solid #e5e7eb', background: '#f9fafb', color: '#1f2937', fontSize: 13, boxSizing: 'border-box' }} placeholder="LiveKit URL" value={adminUrl} onChange={e=>setAdminUrl(e.target.value)} />
+                    <div style={{ display: 'flex', gap: 8 }}>
+                      <input style={{ flex: 1, padding: '8px 12px', borderRadius: 8, border: '1px solid #e5e7eb', background: '#f9fafb', color: '#1f2937', fontSize: 13, boxSizing: 'border-box' }} placeholder="API Key" value={adminApiKey} onChange={e=>setAdminApiKey(e.target.value)} />
+                      <input type="password" style={{ flex: 1, padding: '8px 12px', borderRadius: 8, border: '1px solid #e5e7eb', background: '#f9fafb', color: '#1f2937', fontSize: 13, boxSizing: 'border-box' }} placeholder="Secret" value={adminApiSecret} onChange={e=>setAdminApiSecret(e.target.value)} />
+                    </div>
+                    <button onClick={handleSavePreset} style={{ background: 'none', border: 'none', color: '#4f46e5', fontSize: 11, fontWeight: 'bold', textAlign: 'left', cursor: 'pointer', padding: 0 }}>+ Simpan sbg Preset</button>
+                  </div>
+
+                  <hr style={{ borderTop: '1px solid #f3f4f6', margin: '4px 0' }} />
+
+                  {/* Actions Section */}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    <button onClick={handleAdminSubmit} disabled={adminLoading} style={{ width: '100%', padding: '12px 0', borderRadius: 8, background: '#4f46e5', color: 'white', fontWeight: 'bold', border: 'none', fontSize: 13, cursor: 'pointer' }}>
+                      {adminLoading ? '⏳...' : 'Simpan & Deploy ke Vercel'}
+                    </button>
+                    <button onClick={handleForceReconnect} disabled={adminLoading} style={{ width: '100%', padding: '12px 0', borderRadius: 8, background: '#fff7ed', color: '#ea580c', fontWeight: 'bold', border: '1px solid #fed7aa', fontSize: 13, cursor: 'pointer' }}>
+                      🔄 Force Reconnect
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         )}

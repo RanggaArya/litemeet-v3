@@ -27,17 +27,17 @@ public class AudioRoutePlugin extends Plugin {
     private boolean isSpeakerOn = false;
 
     /**
-     * Aktifkan mode komunikasi (earpiece + volume panggilan)
-     * Panggil saat meeting dimulai
+     * Aktifkan mode komunikasi (sekarang diubah ke MODE_NORMAL / media volume)
+     * Sesuai request: menggunakan volume media, bukan volume panggilan, dan langsung lewat speaker
      */
     @PluginMethod
     public void enableCallMode(PluginCall call) {
         try {
             AudioManager am = (AudioManager) getContext().getSystemService(Context.AUDIO_SERVICE);
             if (am != null) {
-                am.setMode(AudioManager.MODE_IN_COMMUNICATION);
-                am.setSpeakerphoneOn(false);
-                isSpeakerOn = false;
+                am.setMode(AudioManager.MODE_NORMAL);
+                am.setSpeakerphoneOn(true);
+                isSpeakerOn = true;
                 
                 // Request audio focus agar audio dari app lain di-duck/pause
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -46,10 +46,10 @@ public class AudioRoutePlugin extends Plugin {
                     ).build();
                     am.requestAudioFocus(focusReq);
                 } else {
-                    am.requestAudioFocus(null, AudioManager.STREAM_VOICE_CALL, AudioManager.AUDIOFOCUS_GAIN_TRANSIENT);
+                    am.requestAudioFocus(null, AudioManager.STREAM_MUSIC, AudioManager.AUDIOFOCUS_GAIN_TRANSIENT);
                 }
 
-                Log.d(TAG, "Call mode enabled — earpiece active");
+                Log.d(TAG, "Call mode enabled — MODE_NORMAL, speaker ON");
             }
         } catch (Exception e) {
             Log.w(TAG, "enableCallMode error: " + e.getMessage());
