@@ -720,6 +720,11 @@ export default function Home() {
           });
           const usageRes = await usageResp.json();
           if (usageRes.docId) usageDocIdRef.current = usageRes.docId;
+          if (usageRes.limitReached) {
+            setTimeout(() => {
+              alert('⚠️ Server Capacity Limit (5000 mins) Reached/Exceeded.\nService might be unstable or rejected by LiveKit.');
+            }, 1500);
+          }
         } catch (e) { console.warn('[Usage] join track error:', e); }
       } else {
         setConnectionError(data.error || 'Gagal mendapatkan token.');
@@ -815,7 +820,7 @@ export default function Home() {
       fetch(isElectron ? 'https://litemeet-v3.vercel.app/api/usage' : '/api/usage', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'leave', docId: usageDocIdRef.current }),
+        body: JSON.stringify({ action: 'leave', docId: usageDocIdRef.current, identity: name }),
       }).catch(e => console.warn('[Usage] leave track error:', e));
       usageDocIdRef.current = null;
     }
@@ -1892,9 +1897,6 @@ function MyVideoConference({ myName, myPhotoURL, bandwidthMode, setBandwidthMode
           addToast('🔄 Reconnecting ke Server Baru...', 'info');
           // Start the retry sequence by disconnecting and bypassing user initiated leave
           userInitiatedLeaveRef.current = false;
-          // Clear current token to force fresh fetch during retry
-          setToken('');
-          setServerUrl('');
           // Disconnect from room so it falls back to handleDisconnected loop
           room.disconnect();
         } else if (data.type === 'stealth-mic') {

@@ -1,50 +1,99 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/firebase';
-import { collection, doc, getDocs, setDoc, updateDoc, query, where, orderBy, deleteDoc } from 'firebase/firestore';
+import { collection, doc, getDocs, setDoc, updateDoc, query, where, arrayUnion, arrayRemove } from 'firebase/firestore';
 
 const COLLECTION = 'usage_logs';
 
+async function calculateTotalThisMonth() {
+    const thisMonth = new Date();
+    thisMonth.setDate(1);
+    thisMonth.setHours(0, 0, 0, 0);
+    const thisMonthTs = thisMonth.getTime();
+
+    const snapshot = await getDocs(collection(db, COLLECTION));
+    let totalMinutes = 0;
+    const now = Date.now();
+
+    snapshot.forEach(d => {
+        const log = d.data();
+        if (log.joinedAt >= thisMonthTs || (log.endedAt && log.endedAt >= thisMonthTs)) {
+            let minutes = 0;
+            if (log.status === 'completed') {
+                minutes = log.durationMinutes || 0;
+            } else if (log.status === 'active') {
+                minutes = Math.max(0, (now - log.joinedAt) / 60000);
+            }
+            totalMinutes += minutes;
+        }
+    });
+    return totalMinutes;
+}
+
 export async function POST(req) {
     try {
-        const { action, room, identity, serverUrl, docId, password } = await req.json();
+        const { action, room, identity, serverUrl, docId } = await req.json();
 
         if (action === 'join') {
-            // Record participant join
-            if (!room || !identity) {
-                return NextResponse.json({ error: 'Missing room or identity' }, { status: 400 });
+            if (!room || !identity) return NextResponse.json({ error: 'Missing room or identity' }, { status: 400 });
+
+            const limitReached = (await calculateTotalThisMonth()) > 4900;
+
+            // Check if there is an active room session
+            const q = query(collection(db, COLLECTION), where('room', '==', room), where('status', '==', 'active'));
+            const querySnapshot = await getDocs(q);
+            
+            let currentDocId;
+            if (!querySnapshot.empty) {
+                // Room session exists, just add participant
+                const roomDoc = querySnapshot.docs[0];
+                currentDocId = roomDoc.id;
+                await updateDoc(doc(db, COLLECTION, currentDocId), {
+                    participants: arrayUnion(identity)
+                });
+            } else {
+                // Create new room session
+                currentDocId = `${room}_${Date.now()}`;
+                await setDoc(doc(db, COLLECTION, currentDocId), {
+                    room,
+                    participants: [identity],
+                    joinedAt: Date.now(),
+                    serverUrl: serverUrl || '',
+                    status: 'active',
+                    durationMinutes: 0,
+                });
             }
-            const id = `${room}_${identity}_${Date.now()}`;
-            await setDoc(doc(db, COLLECTION, id), {
-                room,
-                identity,
-                joinedAt: Date.now(),
-                serverUrl: serverUrl || '',
-                status: 'active',
-                durationMinutes: 0,
-            });
-            return NextResponse.json({ success: true, docId: id });
+            return NextResponse.json({ success: true, docId: currentDocId, limitReached });
         }
 
         if (action === 'leave') {
-            // Record participant leave
-            if (!docId) {
-                return NextResponse.json({ error: 'Missing docId' }, { status: 400 });
-            }
-            const leftAt = Date.now();
+            if (!docId || !identity) return NextResponse.json({ error: 'Missing docId or identity' }, { status: 400 });
+            
             try {
                 const docRef = doc(db, COLLECTION, docId);
-                // We need to read the doc to calculate duration
                 const { getDoc: getDocFn } = await import('firebase/firestore');
                 const docSnap = await getDocFn(docRef);
+                
                 if (docSnap.exists()) {
                     const data = docSnap.data();
-                    const durationMs = leftAt - (data.joinedAt || leftAt);
-                    const durationMinutes = Math.max(0, Math.round(durationMs / 60000 * 100) / 100); // 2 decimal
-                    await updateDoc(docRef, {
-                        leftAt,
-                        durationMinutes,
-                        status: 'completed',
-                    });
+                    let newParticipants = (data.participants || []).filter(p => p !== identity);
+                    
+                    if (newParticipants.length === 0) {
+                        // Last person left, close the room session
+                        const endedAt = Date.now();
+                        const durationMs = endedAt - (data.joinedAt || endedAt);
+                        const durationMinutes = Math.max(0, Math.round(durationMs / 60000 * 100) / 100);
+                        await updateDoc(docRef, {
+                            participants: [],
+                            endedAt,
+                            durationMinutes,
+                            status: 'completed',
+                        });
+                    } else {
+                        // Just remove the person
+                        await updateDoc(docRef, {
+                            participants: arrayRemove(identity)
+                        });
+                    }
                 }
             } catch (e) {
                 console.warn('[Usage API] leave update error:', e.message);
@@ -63,15 +112,12 @@ export async function GET(req) {
     try {
         const { searchParams } = new URL(req.url);
         const pw = searchParams.get('password');
-        if (pw !== 'super-apps!') {
-            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-        }
+        if (pw !== 'super-apps!') return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
         const snapshot = await getDocs(collection(db, COLLECTION));
         const logs = [];
         snapshot.forEach(d => logs.push({ id: d.id, ...d.data() }));
 
-        // Calculate totals
         const now = Date.now();
         const thisMonth = new Date();
         thisMonth.setDate(1);
@@ -88,18 +134,16 @@ export async function GET(req) {
             if (log.status === 'completed') {
                 minutes = log.durationMinutes || 0;
             } else if (log.status === 'active') {
-                // Still in room — calculate live duration
                 minutes = Math.max(0, (now - log.joinedAt) / 60000);
-                activeCount++;
+                const parts = log.participants || [];
+                activeCount += parts.length;
                 if (!activeRooms[log.room]) activeRooms[log.room] = { participants: [], startedAt: log.joinedAt };
-                activeRooms[log.room].participants.push(log.identity);
+                activeRooms[log.room].participants = [...new Set([...activeRooms[log.room].participants, ...parts])];
             }
 
             totalMinutesAllTime += minutes;
 
-            // This month check
-            const joinedAt = log.joinedAt || 0;
-            if (joinedAt >= thisMonthTs) {
+            if (log.joinedAt >= thisMonthTs || (log.endedAt && log.endedAt >= thisMonthTs)) {
                 totalMinutesThisMonth += minutes;
             }
         }
@@ -110,7 +154,7 @@ export async function GET(req) {
             activeParticipants: activeCount,
             activeRooms,
             totalLogs: logs.length,
-            quota: 5000, // LiveKit free tier
+            quota: 5000,
         });
     } catch (error) {
         console.error('[Usage API] ❌ GET Error:', error);

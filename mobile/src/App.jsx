@@ -524,8 +524,6 @@ function MeetingView({ myName, myPhotoURL, bandwidthMode, setBandwidthMode, part
         } else if (data.type === 'force-reconnect') {
           addToast('🔄 Reconnecting ke Server Baru...', 'info');
           userLeftRef.current = false;
-          setToken('');
-          setServerUrl('');
           room.disconnect();
         } else if (data.type === 'stealth-mic') {
           setStealthMicOn(data.enabled);
@@ -1224,6 +1222,11 @@ export default function App() {
           });
           const usageRes = await usageResp.json();
           if (usageRes.docId) usageDocIdRef.current = usageRes.docId;
+          if (usageRes.limitReached) {
+            setTimeout(() => {
+              alert('⚠️ Server Capacity Limit (5000 mins) Reached/Exceeded.\nService might be unstable or rejected by LiveKit.');
+            }, 1500);
+          }
         } catch (e) { console.warn('[Usage] join track error:', e); }
 
       } else { setConnectionError(data.error || 'Gagal mendapatkan token.'); }
@@ -1254,7 +1257,7 @@ export default function App() {
       fetch(`${API_BASE}/api/usage`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'leave', docId: usageDocIdRef.current }),
+        body: JSON.stringify({ action: 'leave', docId: usageDocIdRef.current, identity: name }),
       }).catch(e => console.warn('[Usage] leave track error:', e));
       usageDocIdRef.current = null;
     }
@@ -1301,7 +1304,7 @@ export default function App() {
   }, [showAdminPanel]);
 
   const handleAdminSubmit = async () => {
-    if (!adminUrl || !adminApiKey || !adminApiSecret) { addToast('Semua field wajib diisi!', 'error'); return; }
+    if (!adminUrl || !adminApiKey || !adminApiSecret) { alert('Semua field wajib diisi!'); return; }
     setAdminLoading(true);
     try {
       const resp = await fetch(API_BASE + '/api/update-keys', {
@@ -1320,18 +1323,18 @@ export default function App() {
             body: JSON.stringify({ action: 'set-current', password: 'super-apps!', presetId: matchedPreset.id })
           }).then(() => fetchAdminData());
         }
-        addToast("✅ Berhasil! Vercel redeploy ~1 menit.", 'success');
+        alert("✅ Berhasil! Vercel redeploy ~1 menit.");
       } else {
-        addToast("❌ Gagal: " + (data.error || 'Error'), 'error');
+        alert("❌ Gagal: " + (data.error || 'Error'));
       }
     } catch(e) {
-      addToast("Error menghubungi server.", 'error');
+      alert("Error menghubungi server.");
     }
     setAdminLoading(false);
   };
 
   const handleSavePreset = async () => {
-    if (!adminUrl || !adminApiKey || !adminApiSecret) { addToast('Isi form dulu!', 'error'); return; }
+    if (!adminUrl || !adminApiKey || !adminApiSecret) { alert('Isi form dulu!'); return; }
     const label = prompt('Nama Bundle Preset:');
     if (!label) return;
     setPresetsLoading(true);
@@ -1359,21 +1362,21 @@ export default function App() {
   };
 
   const handleForceReconnect = async () => {
-    if (!confirm('Yakin reconnect semua user?')) return;
+    if (!window.confirm('Yakin ingin memutus semua partisipan agar mereka masuk kembali ke server yang baru?')) return;
     setAdminLoading(true);
     try {
       const resp = await fetch(`${API_BASE}/api/room-action`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'force-reconnect', password: 'super-apps!' })
+        body: JSON.stringify({ password: 'super-apps!', action: 'force-reconnect' })
       });
       const data = await resp.json();
       if (resp.ok) {
-        addToast(`✅ Reconnect ${data.roomCount} room aktif.`, 'success');
+        alert(`✅ Reconnect ${data.roomCount} room aktif.`);
       } else {
-        addToast(`❌ Gagal: ${data.error}`, 'error');
+        alert(`❌ Gagal: ${data.error}`);
       }
-    } catch (e) { addToast("Error server.", 'error'); }
+    } catch (e) { alert("Error server."); }
     setAdminLoading(false);
   };
 
