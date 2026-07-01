@@ -3,6 +3,8 @@ package com.aralya.litemeet;
 import android.content.Context;
 import android.media.AudioManager;
 import android.os.Build;
+import android.os.Handler;
+import android.os.Looper;
 import android.util.Log;
 import com.getcapacitor.Plugin;
 import com.getcapacitor.PluginCall;
@@ -12,38 +14,49 @@ import com.getcapacitor.JSObject;
 
 /**
  * Capacitor Plugin untuk mengontrol audio routing di Android.
- * - enableCallMode: set speaker ON dan paksa tombol volume ke STREAM_MUSIC
- * - disableCallMode: reset ke default
- * - toggleSpeaker: toggle earpiece/loudspeaker
  *
- * Kunci: setVolumeControlStream(STREAM_MUSIC) agar tombol volume hardware
- * mengontrol volume media (bukan volume panggilan/VOICE_CALL).
+ * MASALAH: WebRTC di WebView secara internal terus mengeset
+ * AudioManager.MODE_IN_COMMUNICATION, yang menyebabkan:
+ *   - Audio keluar via earpiece (bukan loudspeaker)
+ *   - Tombol volume mengontrol STREAM_VOICE_CALL (bukan STREAM_MUSIC)
+ *
+ * SOLUSI: Gunakan Handler periodik (setiap 500ms) yang terus memaksa
+ * MODE_NORMAL + speakerphoneOn(true) selama meeting aktif.
+ * Juga override volume key di MainActivity agar selalu kontrol STREAM_MUSIC.
  */
 @CapacitorPlugin(name = "AudioRoute")
 public class AudioRoutePlugin extends Plugin {
 
     private static final String TAG = "AudioRoutePlugin";
     private boolean isSpeakerOn = false;
+    private boolean isMeetingActive = false;
+
+    // Handler untuk secara periodik enforce audio mode
+    private Handler audioEnforcer = null;
+    private Runnable audioEnforcerRunnable = null;
+    private static final int ENFORCE_INTERVAL_MS = 500; // setiap 500ms
 
     // Simpan AudioFocusRequest untuk API 26+ agar bisa di-abandon dengan benar
     private android.media.AudioFocusRequest audioFocusRequest = null;
 
     /**
      * Aktifkan mode meeting:
-     * - Audio lewat speaker (MODE_NORMAL + speakerphoneOn)
-     * - Tombol volume hardware dikunci ke STREAM_MUSIC (bukan VOICE_CALL)
+     * - Audio lewat speaker media (MODE_NORMAL + speakerphoneOn)
+     * - Tombol volume hardware dikunci ke STREAM_MUSIC
+     * - Handler periodik enforce setting agar WebRTC tidak bisa override
      */
     @PluginMethod
     public void enableCallMode(PluginCall call) {
+        isMeetingActive = true;
+        isSpeakerOn = true;
+
         try {
+            // Set audio mode sekali dulu
+            enforceAudioMode();
+
+            // Request audio focus
             AudioManager am = (AudioManager) getContext().getSystemService(Context.AUDIO_SERVICE);
             if (am != null) {
-                // Gunakan MODE_NORMAL agar audio routing melalui media stream
-                am.setMode(AudioManager.MODE_NORMAL);
-                am.setSpeakerphoneOn(true);
-                isSpeakerOn = true;
-
-                // Request audio focus agar audio dari app lain di-duck/pause
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                     audioFocusRequest = new android.media.AudioFocusRequest.Builder(
                         AudioManager.AUDIOFOCUS_GAIN
@@ -62,22 +75,27 @@ public class AudioRoutePlugin extends Plugin {
                 } else {
                     am.requestAudioFocus(null, AudioManager.STREAM_MUSIC, AudioManager.AUDIOFOCUS_GAIN);
                 }
-
-                Log.d(TAG, "enableCallMode: MODE_NORMAL, speakerOn=true");
             }
 
-            // *** KUNCI UTAMA: paksa tombol volume hardware ke STREAM_MUSIC ***
-            // Tanpa ini, Android otomatis memilih STREAM_VOICE_CALL saat WebRTC aktif,
-            // sehingga tombol volume mengontrol volume panggilan, bukan media.
+            // Paksa volume control stream ke STREAM_MUSIC
             getActivity().runOnUiThread(() -> {
                 try {
                     getActivity().setVolumeControlStream(AudioManager.STREAM_MUSIC);
-                    Log.d(TAG, "Volume control stream -> STREAM_MUSIC");
                 } catch (Exception e) {
                     Log.w(TAG, "setVolumeControlStream error: " + e.getMessage());
                 }
             });
 
+            // Signal ke MainActivity bahwa meeting aktif (untuk intercept volume keys)
+            if (getActivity() instanceof MainActivity) {
+                ((MainActivity) getActivity()).setMeetingActive(true);
+            }
+
+            // Start periodic enforcer — ini yang memaksa MODE_NORMAL terus-menerus
+            // karena WebRTC di WebView terus menimpa ke MODE_IN_COMMUNICATION
+            startAudioEnforcer();
+
+            Log.d(TAG, "enableCallMode: meeting active, audio enforcer started");
         } catch (Exception e) {
             Log.w(TAG, "enableCallMode error: " + e.getMessage());
         }
@@ -88,17 +106,21 @@ public class AudioRoutePlugin extends Plugin {
     }
 
     /**
-     * Nonaktifkan mode meeting — kembalikan audio dan volume control ke default.
-     * Panggil saat meeting selesai / user leave.
+     * Nonaktifkan mode meeting — hentikan enforcer dan kembalikan ke default.
      */
     @PluginMethod
     public void disableCallMode(PluginCall call) {
+        isMeetingActive = false;
+        isSpeakerOn = false;
+
+        // Stop periodic enforcer
+        stopAudioEnforcer();
+
         try {
             AudioManager am = (AudioManager) getContext().getSystemService(Context.AUDIO_SERVICE);
             if (am != null) {
                 am.setMode(AudioManager.MODE_NORMAL);
                 am.setSpeakerphoneOn(false);
-                isSpeakerOn = false;
 
                 // Lepas audio focus
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -109,20 +131,23 @@ public class AudioRoutePlugin extends Plugin {
                 } else {
                     am.abandonAudioFocus(null);
                 }
-
-                Log.d(TAG, "disableCallMode: normal mode restored");
             }
 
-            // Reset volume control ke default sistem
+            // Reset volume control ke default
             getActivity().runOnUiThread(() -> {
                 try {
                     getActivity().setVolumeControlStream(AudioManager.USE_DEFAULT_STREAM_TYPE);
-                    Log.d(TAG, "Volume control stream -> USE_DEFAULT_STREAM_TYPE");
                 } catch (Exception e) {
                     Log.w(TAG, "setVolumeControlStream reset error: " + e.getMessage());
                 }
             });
 
+            // Signal ke MainActivity
+            if (getActivity() instanceof MainActivity) {
+                ((MainActivity) getActivity()).setMeetingActive(false);
+            }
+
+            Log.d(TAG, "disableCallMode: meeting ended, enforcer stopped");
         } catch (Exception e) {
             Log.w(TAG, "disableCallMode error: " + e.getMessage());
         }
@@ -131,7 +156,6 @@ public class AudioRoutePlugin extends Plugin {
 
     /**
      * Toggle antara earpiece dan loudspeaker saat meeting.
-     * Return { speakerOn: boolean }
      */
     @PluginMethod
     public void toggleSpeaker(PluginCall call) {
@@ -140,14 +164,6 @@ public class AudioRoutePlugin extends Plugin {
             if (am != null) {
                 isSpeakerOn = !isSpeakerOn;
                 am.setSpeakerphoneOn(isSpeakerOn);
-                // Pastikan volume control tetap di STREAM_MUSIC setelah toggle
-                getActivity().runOnUiThread(() -> {
-                    try {
-                        getActivity().setVolumeControlStream(AudioManager.STREAM_MUSIC);
-                    } catch (Exception e) {
-                        Log.w(TAG, "toggleSpeaker setVolumeControlStream error: " + e.getMessage());
-                    }
-                });
                 Log.d(TAG, "Speaker toggled: " + (isSpeakerOn ? "ON (loudspeaker)" : "OFF (earpiece)"));
             }
         } catch (Exception e) {
@@ -175,5 +191,68 @@ public class AudioRoutePlugin extends Plugin {
         }
         result.put("speakerOn", isSpeakerOn);
         call.resolve(result);
+    }
+
+    // ================================================================
+    //  AUDIO ENFORCER — paksa MODE_NORMAL + speaker secara periodik
+    // ================================================================
+
+    /**
+     * Paksa audio mode ke MODE_NORMAL dan speaker ON.
+     * Dipanggil setiap 500ms oleh Handler selama meeting aktif.
+     */
+    private void enforceAudioMode() {
+        try {
+            AudioManager am = (AudioManager) getContext().getSystemService(Context.AUDIO_SERVICE);
+            if (am != null) {
+                int currentMode = am.getMode();
+
+                // Jika WebRTC sudah menimpa ke MODE_IN_COMMUNICATION, paksa balik
+                if (currentMode != AudioManager.MODE_NORMAL) {
+                    am.setMode(AudioManager.MODE_NORMAL);
+                    Log.d(TAG, "enforceAudioMode: overrode mode " + currentMode + " -> MODE_NORMAL");
+                }
+
+                // Paksa speaker sesuai state terakhir
+                if (isSpeakerOn && !am.isSpeakerphoneOn()) {
+                    am.setSpeakerphoneOn(true);
+                    Log.d(TAG, "enforceAudioMode: re-enabled speakerphone");
+                }
+            }
+        } catch (Exception e) {
+            Log.w(TAG, "enforceAudioMode error: " + e.getMessage());
+        }
+    }
+
+    /**
+     * Start periodic Handler yang enforce audio mode setiap 500ms.
+     */
+    private void startAudioEnforcer() {
+        stopAudioEnforcer(); // hentikan jika sudah berjalan
+
+        audioEnforcer = new Handler(Looper.getMainLooper());
+        audioEnforcerRunnable = new Runnable() {
+            @Override
+            public void run() {
+                if (isMeetingActive) {
+                    enforceAudioMode();
+                    if (audioEnforcer != null) {
+                        audioEnforcer.postDelayed(this, ENFORCE_INTERVAL_MS);
+                    }
+                }
+            }
+        };
+        audioEnforcer.postDelayed(audioEnforcerRunnable, ENFORCE_INTERVAL_MS);
+    }
+
+    /**
+     * Stop periodic enforcer.
+     */
+    private void stopAudioEnforcer() {
+        if (audioEnforcer != null && audioEnforcerRunnable != null) {
+            audioEnforcer.removeCallbacks(audioEnforcerRunnable);
+        }
+        audioEnforcer = null;
+        audioEnforcerRunnable = null;
     }
 }
