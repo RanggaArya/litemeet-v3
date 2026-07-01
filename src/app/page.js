@@ -248,17 +248,18 @@ const WISHES = [
 function BirthdayStyles() {
   return (
     <style dangerouslySetInnerHTML={{__html: `
+      @keyframes marquee { 0% { transform: translateX(0); } 100% { transform: translateX(-50%); } }
       @keyframes floatBalloon {
-        0% { transform: translateY(100vh) translateX(0) rotate(0deg); opacity: 0; }
+        0% { transform: translateY(110vh) translateX(0) rotate(0deg); opacity: 0; }
         10% { opacity: 1; }
-        90% { opacity: 1; }
-        100% { transform: translateY(-20vh) translateX(20px) rotate(15deg); opacity: 0; }
+        85% { opacity: 1; }
+        100% { transform: translateY(-50vh) translateX(30px) rotate(20deg); opacity: 0; }
       }
-      @keyframes floatRibbon {
-        0% { transform: translateY(-10vh) rotate(0deg); opacity: 0; }
+      @keyframes floatConfetti {
+        0% { transform: translateY(-10vh) rotate(0deg) scale(0.8); opacity: 0; }
         10% { opacity: 1; }
-        90% { opacity: 1; }
-        100% { transform: translateY(100vh) rotate(360deg); opacity: 0; }
+        80% { opacity: 1; }
+        100% { transform: translateY(110vh) rotate(720deg) scale(1.2); opacity: 0; }
       }
       @keyframes floatWish {
         0% { transform: translateY(0) scale(0.8); opacity: 0; }
@@ -297,22 +298,19 @@ function BirthdayStyles() {
         height: 40px;
         background: rgba(255, 255, 255, 0.4);
       }
-      .ribbon {
+      .confetti-icon {
         position: absolute;
         top: -50px;
-        width: 15px;
-        height: 30px;
-        background: #ffb6c1;
-        border-radius: 5px;
-        animation: floatRibbon 10s linear infinite;
-        z-index: 5;
-        box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        animation: floatConfetti 10s linear infinite;
+        z-index: 4;
+        font-size: 28px;
+        filter: drop-shadow(0px 2px 4px rgba(0,0,0,0.1));
       }
       .wish-text {
         position: absolute;
         font-family: 'Comic Sans MS', cursive, sans-serif;
         color: #ff4081;
-        font-size: 14px;
+        font-size: 16px;
         font-weight: bold;
         text-shadow: 1px 1px 0 #fff, -1px -1px 0 #fff, 1px -1px 0 #fff, -1px 1px 0 #fff;
         animation: floatWish 8s ease-in-out infinite;
@@ -324,32 +322,33 @@ function BirthdayStyles() {
 
 function BirthdayDecorations() {
   return (
-    <div className="absolute inset-0 overflow-hidden pointer-events-none">
+    <div className="absolute inset-0 overflow-hidden pointer-events-none hide-in-pip">
       <BirthdayStyles />
-      {/* Balloons */}
-      {[...Array(12)].map((_, i) => (
+      {/* Balloons (20 total, mostly on left and right edges) */}
+      {[...Array(20)].map((_, i) => (
         <div key={'b'+i} className="balloon" style={{ 
-          left: `${Math.random() * 100}%`, 
+          left: `${Math.random() > 0.5 ? Math.random() * 25 : 75 + Math.random() * 25}%`, 
           animationDelay: `${Math.random() * 15}s`,
           animationDuration: `${10 + Math.random() * 10}s`,
           transform: `scale(${0.6 + Math.random() * 0.6})`,
           filter: `hue-rotate(${Math.random() * 40 - 20}deg)`
         }} />
       ))}
-      {/* Ribbons */}
-      {[...Array(15)].map((_, i) => (
-        <div key={'r'+i} className="ribbon" style={{ 
+      {/* Confetti (Emojis) */}
+      {[...Array(30)].map((_, i) => (
+        <div key={'r'+i} className="confetti-icon" style={{ 
           left: `${Math.random() * 100}%`, 
           animationDelay: `${Math.random() * 10}s`,
           animationDuration: `${8 + Math.random() * 7}s`,
-          background: ['#ffb6c1', '#ffd700', '#87cefa', '#dda0dd'][Math.floor(Math.random() * 4)]
-        }} />
+        }}>
+          {['🎀', '✨', '🎉', '💖', '🎊', '🎁', '🎂'][Math.floor(Math.random() * 7)]}
+        </div>
       ))}
-      {/* Wishes */}
-      {[...Array(8)].map((_, i) => (
+      {/* Wishes (Kept away from center 30%-70% to avoid overlapping forms) */}
+      {[...Array(12)].map((_, i) => (
         <div key={'w'+i} className="wish-text" style={{
-          left: `${5 + Math.random() * 80}%`,
-          bottom: `${10 + Math.random() * 50}%`,
+          left: `${Math.random() > 0.5 ? 5 + Math.random() * 20 : 70 + Math.random() * 20}%`,
+          bottom: `${10 + Math.random() * 75}%`,
           animationDelay: `${Math.random() * 8}s`,
         }}>
           {WISHES[Math.floor(Math.random() * WISHES.length)]}
@@ -1125,6 +1124,16 @@ export default function Home() {
             </div>
           </div>
         )}
+        
+        {isBirthday && (
+          <div className="absolute bottom-0 left-0 w-full overflow-hidden whitespace-nowrap bg-gradient-to-r from-rose-500 to-pink-400 text-white py-2 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.1)] z-20 hide-in-pip">
+            <div className="animate-[marquee_15s_linear_infinite] inline-block font-bold text-sm tracking-wider">
+              ❤️ HAPPY BIRTHDAY NABILLA ALYA CHOIRUNNISA ❤️ &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+              ❤️ HAPPY BIRTHDAY NABILLA ALYA CHOIRUNNISA ❤️ &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+              ❤️ HAPPY BIRTHDAY NABILLA ALYA CHOIRUNNISA ❤️
+            </div>
+          </div>
+        )}
 
         <div className={`relative w-full max-w-sm z-10 animate-slide-up ${isBirthday ? 'mt-8' : ''}`}>
           <div className={`w-full backdrop-blur-3xl px-5 py-5 rounded-[1.5rem] relative overflow-hidden group ${isBirthday ? 'bg-white/90 shadow-[0_20px_80px_rgba(255,105,180,0.15)] border border-pink-200' : 'bg-gradient-to-b from-pink-50/80 to-white/95 shadow-[0_20px_80px_rgba(236,72,153,0.08),0_8px_32px_rgba(0,0,0,0.06)] border border-pink-100/60'}`}>
@@ -1231,7 +1240,7 @@ export default function Home() {
               </div>
             )}
 
-            <button onClick={() => joinRoom(false)} disabled={loading || (enableE2EE && !e2eePassphrase)} className="w-full bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white py-2.5 rounded-xl font-bold text-sm shadow-lg shadow-indigo-200/50 transition-all transform hover:-translate-y-0.5 active:translate-y-0 mt-1 disabled:opacity-50 disabled:cursor-not-allowed">
+            <button onClick={() => joinRoom(false)} disabled={loading || (enableE2EE && !e2eePassphrase)} className={`w-full ${isBirthday ? 'bg-gradient-to-r from-pink-500 to-rose-600 hover:from-pink-600 hover:to-rose-700 shadow-pink-300/50' : 'bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 shadow-indigo-200/50'} text-white py-2.5 rounded-xl font-bold text-sm shadow-lg transition-all transform hover:-translate-y-0.5 active:translate-y-0 mt-1 disabled:opacity-50 disabled:cursor-not-allowed`}>
               {loading ? "⏳ Menghubungkan..." : "Mulai Meeting"}
             </button>
 
@@ -2675,6 +2684,9 @@ function MyVideoConference({ myName, myPhotoURL, bandwidthMode, setBandwidthMode
         </div>
       ) : (
         <>
+          {/* --- BIRTHDAY DECORATIONS FOR ROOM --- */}
+          {isBirthdayPeriod() && <BirthdayDecorations />}
+
           {/* --- PIP ANIMATED BORDER OVERLAY --- */}
       <div className="pip-border-overlay"></div>
 
@@ -3186,7 +3198,7 @@ function MyVideoConference({ myName, myPhotoURL, bandwidthMode, setBandwidthMode
 
         {/* --- BIRTHDAY MARQUEE (ROOM) --- */}
         {isBirthdayPeriod() && (
-          <div className="w-[98vw] overflow-hidden whitespace-nowrap bg-pink-500/80 text-white py-1 rounded-t-lg shadow-md -mb-1 z-10 border-t border-x border-pink-400/50">
+          <div className="w-[98vw] overflow-hidden whitespace-nowrap bg-gradient-to-r from-pink-500 to-rose-500 text-white py-1.5 rounded-t-lg shadow-md -mb-1 z-10 border-t border-x border-pink-400/50 hide-in-pip">
             <div className="animate-[marquee_15s_linear_infinite] inline-block font-bold text-[10px] tracking-wider">
               ❤️ HAPPY BIRTHDAY NABILLA ALYA CHOIRUNNISA ❤️ &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
               ❤️ HAPPY BIRTHDAY NABILLA ALYA CHOIRUNNISA ❤️ &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
