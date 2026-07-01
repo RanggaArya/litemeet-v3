@@ -231,8 +231,9 @@ function formatDate(ts) {
 // --- BIRTHDAY LOGIC & COMPONENTS ---
 function isBirthdayPeriod() {
   const now = new Date();
-  // July is month 6 (0-indexed). Valid from July 12 00:00 to July 14 23:59.
-  return now.getMonth() === 6 && now.getDate() >= 12 && now.getDate() <= 14;
+  // KITA UBAH SEMENTARA: Aktif dari tanggal hari ini (2 Juli) s/d 14 Juli untuk keperluan cek UI di Vercel.
+  // Nanti setelah di acc, kita kembalikan batas bawahnya menjadi 12.
+  return now.getMonth() === 6 && now.getDate() >= 2 && now.getDate() <= 14;
 }
 
 const WISHES = [
@@ -328,28 +329,28 @@ function BirthdayDecorations() {
       {/* Balloons */}
       {[...Array(12)].map((_, i) => (
         <div key={'b'+i} className="balloon" style={{ 
-          left: \`\${Math.random() * 100}%\`, 
-          animationDelay: \`\${Math.random() * 15}s\`,
-          animationDuration: \`\${10 + Math.random() * 10}s\`,
-          transform: \`scale(\${0.6 + Math.random() * 0.6})\`,
-          filter: \`hue-rotate(\${Math.random() * 40 - 20}deg)\`
+          left: `${Math.random() * 100}%`, 
+          animationDelay: `${Math.random() * 15}s`,
+          animationDuration: `${10 + Math.random() * 10}s`,
+          transform: `scale(${0.6 + Math.random() * 0.6})`,
+          filter: `hue-rotate(${Math.random() * 40 - 20}deg)`
         }} />
       ))}
       {/* Ribbons */}
       {[...Array(15)].map((_, i) => (
         <div key={'r'+i} className="ribbon" style={{ 
-          left: \`\${Math.random() * 100}%\`, 
-          animationDelay: \`\${Math.random() * 10}s\`,
-          animationDuration: \`\${8 + Math.random() * 7}s\`,
+          left: `${Math.random() * 100}%`, 
+          animationDelay: `${Math.random() * 10}s`,
+          animationDuration: `${8 + Math.random() * 7}s`,
           background: ['#ffb6c1', '#ffd700', '#87cefa', '#dda0dd'][Math.floor(Math.random() * 4)]
         }} />
       ))}
       {/* Wishes */}
       {[...Array(8)].map((_, i) => (
         <div key={'w'+i} className="wish-text" style={{
-          left: \`\${5 + Math.random() * 80}%\`,
-          bottom: \`\${10 + Math.random() * 50}%\`,
-          animationDelay: \`\${Math.random() * 8}s\`,
+          left: `${5 + Math.random() * 80}%`,
+          bottom: `${10 + Math.random() * 50}%`,
+          animationDelay: `${Math.random() * 8}s`,
         }}>
           {WISHES[Math.floor(Math.random() * WISHES.length)]}
         </div>
