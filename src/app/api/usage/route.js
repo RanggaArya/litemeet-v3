@@ -16,7 +16,7 @@ async function calculateTotalThisMonth() {
 
     snapshot.forEach(d => {
         const log = d.data();
-        if (log.joinedAt >= thisMonthTs || (log.endedAt && log.endedAt >= thisMonthTs)) {
+        if (log.joinedAt >= thisMonthTs || (log.endedAt && log.endedAt >= thisMonthTs) || log.status === 'active') {
             let minutes = 0;
             if (log.status === 'completed') {
                 minutes = log.durationMinutes || 0;
@@ -143,7 +143,8 @@ export async function GET(req) {
 
             totalMinutesAllTime += minutes;
 
-            if (log.joinedAt >= thisMonthTs || (log.endedAt && log.endedAt >= thisMonthTs)) {
+            // Jika dibuat bulan ini, atau berakhir bulan ini, atau MASIH AKTIF, hitung masuk bulan ini
+            if (log.joinedAt >= thisMonthTs || (log.endedAt && log.endedAt >= thisMonthTs) || log.status === 'active') {
                 totalMinutesThisMonth += minutes;
             }
         }
