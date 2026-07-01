@@ -4,19 +4,15 @@ import { collection, doc, getDocs, setDoc, updateDoc, query, where, arrayUnion, 
 
 const COLLECTION = 'usage_logs';
 
-async function calculateTotalThisMonth() {
-    const thisMonth = new Date();
-    thisMonth.setDate(1);
-    thisMonth.setHours(0, 0, 0, 0);
-    const thisMonthTs = thisMonth.getTime();
-
+async function calculateTotalCurrentAPI() {
+    const activeUrl = process.env.LIVEKIT_URL || '';
     const snapshot = await getDocs(collection(db, COLLECTION));
     let totalMinutes = 0;
     const now = Date.now();
 
     snapshot.forEach(d => {
         const log = d.data();
-        if (log.joinedAt >= thisMonthTs || (log.endedAt && log.endedAt >= thisMonthTs) || log.status === 'active') {
+        if (log.serverUrl === activeUrl || activeUrl === '') {
             let minutes = 0;
             if (log.status === 'completed') {
                 minutes = log.durationMinutes || 0;
@@ -36,7 +32,7 @@ export async function POST(req) {
         if (action === 'join') {
             if (!room || !identity) return NextResponse.json({ error: 'Missing room or identity' }, { status: 400 });
 
-            const limitReached = (await calculateTotalThisMonth()) > 4900;
+            const limitReached = (await calculateTotalCurrentAPI()) > 4900;
 
             // Check if there is an active room session
             const q = query(collection(db, COLLECTION), where('room', '==', room), where('status', '==', 'active'));
@@ -119,13 +115,10 @@ export async function GET(req) {
         snapshot.forEach(d => logs.push({ id: d.id, ...d.data() }));
 
         const now = Date.now();
-        const thisMonth = new Date();
-        thisMonth.setDate(1);
-        thisMonth.setHours(0, 0, 0, 0);
-        const thisMonthTs = thisMonth.getTime();
+        const activeUrl = process.env.LIVEKIT_URL || '';
 
         let totalMinutesAllTime = 0;
-        let totalMinutesThisMonth = 0;
+        let totalMinutesCurrentAPI = 0;
         let activeCount = 0;
         const activeRooms = {};
 
@@ -143,15 +136,15 @@ export async function GET(req) {
 
             totalMinutesAllTime += minutes;
 
-            // Jika dibuat bulan ini, atau berakhir bulan ini, atau MASIH AKTIF, hitung masuk bulan ini
-            if (log.joinedAt >= thisMonthTs || (log.endedAt && log.endedAt >= thisMonthTs) || log.status === 'active') {
-                totalMinutesThisMonth += minutes;
+            // Jika serverUrl log sama dengan serverUrl API saat ini
+            if (log.serverUrl === activeUrl || activeUrl === '') {
+                totalMinutesCurrentAPI += minutes;
             }
         }
 
         return NextResponse.json({
             totalMinutesAllTime: Math.round(totalMinutesAllTime * 100) / 100,
-            totalMinutesThisMonth: Math.round(totalMinutesThisMonth * 100) / 100,
+            totalMinutesThisMonth: Math.round(totalMinutesCurrentAPI * 100) / 100, // kept as this property name for frontend compatibility
             activeParticipants: activeCount,
             activeRooms,
             totalLogs: logs.length,

@@ -1179,7 +1179,7 @@ export default function Home() {
                     return (
                       <div className="bg-gray-50 border border-gray-100 rounded-xl p-4">
                         <h3 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-3 flex justify-between items-center">
-                          <span>LiveKit Usage (Bulan Ini)</span>
+                          <span>LiveKit Usage (Current API)</span>
                           <span style={{ color: badgeText, background: badgeBg }} className="px-2 py-0.5 rounded-full font-bold text-[11px]">{used} / {quota} mnt</span>
                         </h3>
                         <div className="w-full bg-gray-200 rounded-full h-2 mb-2" style={{ position: 'relative' }}>

@@ -1602,7 +1602,7 @@ export default function App() {
                     return (
                       <div style={{ background: '#f9fafb', border: '1px solid #f3f4f6', borderRadius: 12, padding: 12 }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-                          <h3 style={{ fontSize: 11, fontWeight: 'bold', color: '#6b7280', textTransform: 'uppercase' }}>LiveKit Usage (Bulan Ini)</h3>
+                          <h3 style={{ fontSize: 11, fontWeight: 'bold', color: '#6b7280', textTransform: 'uppercase' }}>LiveKit Usage (Current API)</h3>
                           <span style={{ fontSize: 10, color: badgeColor, background: badgeBg, padding: '2px 8px', borderRadius: 12, fontWeight: 'bold' }}>{used} / {quota} mnt</span>
                         </div>
                         <div style={{ width: '100%', background: '#e5e7eb', borderRadius: 999, height: 8, marginBottom: 6 }}>
