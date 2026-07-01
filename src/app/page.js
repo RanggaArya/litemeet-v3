@@ -1000,7 +1000,7 @@ export default function Home() {
   if (!joined && authScreen && !authLoading) {
     const isBirthday = isBirthdayPeriod();
     return (
-      <div className={\`flex min-h-screen items-center justify-center text-white p-4 font-sans relative overflow-hidden \${isBirthday ? 'bg-pink-50' : 'bg-[#0a0a0f]'}\`}>
+      <div className={`flex min-h-screen items-center justify-center text-white p-4 font-sans relative overflow-hidden ${isBirthday ? 'bg-pink-50' : 'bg-[#0a0a0f]'}`}>
         {isBirthday && <BirthdayDecorations />}
         
         {isBirthday && (
@@ -1010,9 +1010,9 @@ export default function Home() {
               ❤️ HAPPY BIRTHDAY NABILLA ALYA CHOIRUNNISA ❤️ &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
               ❤️ HAPPY BIRTHDAY NABILLA ALYA CHOIRUNNISA ❤️
             </div>
-            <style dangerouslySetInnerHTML={{__html: \`
+            <style dangerouslySetInnerHTML={{__html: `
               @keyframes marquee { 0% { transform: translateX(0); } 100% { transform: translateX(-50%); } }
-            \`}} />
+            `}} />
           </div>
         )}
         {/* --- PWA INSTALL POPUP --- */}
@@ -1097,13 +1097,13 @@ export default function Home() {
 
             <button
               onClick={handleGuestContinue}
-              className={\`w-full flex items-center justify-center gap-2 py-3.5 px-6 rounded-2xl font-bold text-sm transition-all transform hover:-translate-y-0.5 active:translate-y-0 \${isBirthday ? 'bg-pink-500 text-white hover:bg-pink-600 shadow-md hover:shadow-lg' : 'bg-white/5 hover:bg-white/10 text-gray-300 border border-white/10 hover:border-white/20'}\`}
+              className={`w-full flex items-center justify-center gap-2 py-3.5 px-6 rounded-2xl font-bold text-sm transition-all transform hover:-translate-y-0.5 active:translate-y-0 ${isBirthday ? 'bg-pink-500 text-white hover:bg-pink-600 shadow-md hover:shadow-lg' : 'bg-white/5 hover:bg-white/10 text-gray-300 border border-white/10 hover:border-white/20'}`}
             >
               👤 Masuk sebagai Guest
             </button>
           </div>
 
-          <p className={\`text-[10px] font-medium \${isBirthday ? 'text-pink-600/60' : 'text-gray-600'}\`}>Powered by Aralya @2026 • v0.2.0</p>
+          <p className={`text-[10px] font-medium ${isBirthday ? 'text-pink-600/60' : 'text-gray-600'}`}>Powered by Aralya @2026 • v0.2.0</p>
         </div>
       </div>
     );
@@ -1112,7 +1112,7 @@ export default function Home() {
   if (!joined) {
     const isBirthday = isBirthdayPeriod();
     return (
-      <div className={\`flex min-h-screen items-center justify-center text-gray-800 p-4 font-sans relative overflow-hidden \${isBirthday ? 'bg-gradient-to-br from-pink-50 via-rose-50 to-pink-100' : 'bg-gradient-to-br from-slate-50 via-indigo-50/40 to-purple-50/30'}\`}>
+      <div className={`flex min-h-screen items-center justify-center text-gray-800 p-4 font-sans relative overflow-hidden ${isBirthday ? 'bg-gradient-to-br from-pink-50 via-rose-50 to-pink-100' : 'bg-gradient-to-br from-slate-50 via-indigo-50/40 to-purple-50/30'}`}>
         {isBirthday && <BirthdayDecorations />}
         {!isBirthday && <ParticleCanvas />}
 
@@ -1126,8 +1126,8 @@ export default function Home() {
           </div>
         )}
 
-        <div className={\`relative w-full max-w-sm z-10 animate-slide-up \${isBirthday ? 'mt-8' : ''}\`}>
-          <div className={\`w-full backdrop-blur-3xl px-5 py-5 rounded-[1.5rem] relative overflow-hidden group \${isBirthday ? 'bg-white/90 shadow-[0_20px_80px_rgba(255,105,180,0.15)] border border-pink-200' : 'bg-gradient-to-b from-pink-50/80 to-white/95 shadow-[0_20px_80px_rgba(236,72,153,0.08),0_8px_32px_rgba(0,0,0,0.06)] border border-pink-100/60'}\`}>
+        <div className={`relative w-full max-w-sm z-10 animate-slide-up ${isBirthday ? 'mt-8' : ''}`}>
+          <div className={`w-full backdrop-blur-3xl px-5 py-5 rounded-[1.5rem] relative overflow-hidden group ${isBirthday ? 'bg-white/90 shadow-[0_20px_80px_rgba(255,105,180,0.15)] border border-pink-200' : 'bg-gradient-to-b from-pink-50/80 to-white/95 shadow-[0_20px_80px_rgba(236,72,153,0.08),0_8px_32px_rgba(0,0,0,0.06)] border border-pink-100/60'}`}>
             {/* Efek kilap on hover */}
             <div className="absolute top-0 -inset-full h-full w-1/2 z-5 block transform -skew-x-12 bg-gradient-to-r from-transparent to-white opacity-40 group-hover:animate-shine"></div>
 
@@ -1157,7 +1157,7 @@ export default function Home() {
           )}
 
           <div className="text-center mb-4">
-            <div className={\`inline-flex items-center justify-center w-12 h-12 rounded-2xl mb-3 shadow-lg ring-3 ring-pink-100 animate-float \${isBirthday ? 'bg-gradient-to-br from-pink-400 to-rose-500' : 'bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500'}\`}>
+            <div className={`inline-flex items-center justify-center w-12 h-12 rounded-2xl mb-3 shadow-lg ring-3 ring-pink-100 animate-float ${isBirthday ? 'bg-gradient-to-br from-pink-400 to-rose-500' : 'bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500'}`}>
               {isBirthday ? <span className="text-2xl">🎉</span> : <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>}
             </div>
             <h1 className="text-2xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-indigo-600 to-purple-600 tracking-tight leading-tight">Lite-Meet</h1>
