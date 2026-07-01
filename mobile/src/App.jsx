@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef, useMemo, createContext, useContext, forwardRef } from 'react';
 import { registerPlugin } from '@capacitor/core';
 // GoogleAuth removed - was causing native crashes on Android
-import { App as CapacitorApp } from '@capacitor/app';
+// CapacitorApp removed - unused import
 import { LiveKitRoom, ParticipantTile as LiveKitParticipantTile, RoomAudioRenderer, useTracks, useLocalParticipant, useRemoteParticipants, useRoomContext, useChat, useConnectionState } from '@livekit/components-react';
 import '@livekit/components-styles';
 import { Track, RoomEvent, ConnectionState } from 'livekit-client';
@@ -1116,7 +1116,14 @@ export default function App() {
   const [adminApiKey, setAdminApiKey] = useState('');
   const [adminApiSecret, setAdminApiSecret] = useState('');
   const [adminLoading, setAdminLoading] = useState(false);
-  const [authScreen, setAuthScreen] = useState(true);
+  // Init authScreen synchronously from localStorage — avoid flash of black screen
+  const [authScreen, setAuthScreen] = useState(() => {
+    try {
+      const saved = localStorage.getItem('litemeet_google_auth');
+      if (saved) { const u = JSON.parse(saved); if (u.name) return false; }
+    } catch {}
+    return true;
+  });
   const [initialRole, setInitialRole] = useState('participant');
   const [initialStatus, setInitialStatus] = useState('admitted');
   const [presets, setPresets] = useState([]);
@@ -1398,38 +1405,46 @@ export default function App() {
 
     if (authScreen) {
       return (
-        <div style={{ minHeight: '100dvh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#0a0a0f', color: 'white', padding: 16, fontFamily: 'sans-serif', position: 'relative', overflow: 'hidden' }}>
+        <div style={{ minHeight: '100dvh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'linear-gradient(135deg, #0a0a0f 0%, #0f0a1e 50%, #0a0f1e 100%)', color: 'white', padding: 16, fontFamily: 'Inter, sans-serif', position: 'relative', overflow: 'hidden' }}>
           {/* Animated gradient orbs */}
-          <div style={{ position: 'absolute', top: '25%', left: '25%', width: 384, height: 384, background: 'rgba(79,70,229,0.2)', borderRadius: '50%', filter: 'blur(100px)', animation: 'pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite' }} />
-          <div style={{ position: 'absolute', bottom: '25%', right: '25%', width: 384, height: 384, background: 'rgba(147,51,234,0.2)', borderRadius: '50%', filter: 'blur(100px)', animation: 'pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite', animationDelay: '1s' }} />
-          <div style={{ position: 'absolute', top: '50%', left: '50%', width: 256, height: 256, background: 'rgba(219,39,119,0.1)', borderRadius: '50%', filter: 'blur(80px)', animation: 'pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite', animationDelay: '2s' }} />
+          <div style={{ position: 'absolute', top: '20%', left: '10%', width: 300, height: 300, background: 'rgba(79,70,229,0.15)', borderRadius: '50%', filter: 'blur(80px)' }} />
+          <div style={{ position: 'absolute', bottom: '20%', right: '10%', width: 300, height: 300, background: 'rgba(147,51,234,0.15)', borderRadius: '50%', filter: 'blur(80px)' }} />
 
-          <div className="animate-slide-up" style={{ position: 'relative', zIndex: 10, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 32, width: '100%', maxWidth: 320 }}>
+          <div className="animate-slide-up" style={{ position: 'relative', zIndex: 10, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 40, width: '100%', maxWidth: 320 }}>
             {/* Logo */}
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16 }}>
-              <div style={{ position: 'relative' }}>
-                <div className="animate-float" style={{ width: 80, height: 80, borderRadius: 24, background: 'linear-gradient(to bottom right, #6366f1, #a855f7, #ec4899)', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 25px 50px -12px rgba(168,85,247,0.3)' }}>
-                  <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" fill="none" viewBox="0 0 24 24" stroke="white" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>
-                </div>
-                <div style={{ position: 'absolute', inset: -8, background: 'linear-gradient(to bottom right, rgba(99,102,241,0.2), rgba(168,85,247,0.2), rgba(236,72,153,0.2))', borderRadius: 24, filter: 'blur(20px)', zIndex: -1 }} />
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 20 }}>
+              <div className="animate-float" style={{ width: 96, height: 96, borderRadius: 28, background: 'linear-gradient(135deg, #6366f1, #a855f7, #ec4899)', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 20px 60px rgba(168,85,247,0.4), 0 0 0 1px rgba(255,255,255,0.1)' }}>
+                <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" fill="none" viewBox="0 0 24 24" stroke="white" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>
               </div>
               <div style={{ textAlign: 'center' }}>
-                <h1 style={{ fontSize: 36, fontWeight: 800, margin: 0, background: 'linear-gradient(to right, #818cf8, #c084fc, #f472b6)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', letterSpacing: '-0.025em' }}>Lite-Meet</h1>
-                <p style={{ color: '#6b7280', fontSize: 12, letterSpacing: '0.3em', fontWeight: 600, textTransform: 'uppercase', marginTop: 4, margin: 0 }}>Video Conference</p>
+                <h1 style={{ fontSize: 40, fontWeight: 800, margin: 0, background: 'linear-gradient(to right, #818cf8, #c084fc, #f472b6)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', letterSpacing: '-0.03em' }}>LiteMeet</h1>
+                <p style={{ color: '#6b7280', fontSize: 11, letterSpacing: '0.3em', fontWeight: 600, textTransform: 'uppercase', marginTop: 6 }}>Video Conference</p>
               </div>
             </div>
 
-            {/* Auth buttons */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 12, width: '100%' }}>
-              <button 
-                onClick={() => setAuthScreen(false)} 
-                style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12, background: 'linear-gradient(135deg, #6366f1, #8b5cf6)', color: 'white', padding: '14px 24px', borderRadius: 16, fontSize: 14, fontWeight: 'bold', border: 'none', boxShadow: '0 10px 25px -5px rgba(99,102,241,0.4)' }}
+            {/* Nama tampilan (opsional) */}
+            <div style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: 16 }}>
+              <div style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 16, padding: '16px 20px' }}>
+                <p style={{ color: '#9ca3af', fontSize: 11, fontWeight: 600, marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.1em' }}>Nama Tampilan</p>
+                <input
+                  className="lobby-input"
+                  style={{ background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.12)', color: '#fff', borderRadius: 10 }}
+                  placeholder="Masukkan namamu..."
+                  value={name}
+                  onChange={e => setName(e.target.value)}
+                  onKeyDown={e => e.key === 'Enter' && name.trim() && setAuthScreen(false)}
+                />
+              </div>
+              <button
+                onClick={() => { if (name.trim()) { localStorage.setItem('litemeet_google_auth', JSON.stringify({ name: name.trim(), photoURL: '', email: '' })); setAuthScreen(false); } }}
+                disabled={!name.trim()}
+                style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12, background: name.trim() ? 'linear-gradient(135deg, #6366f1, #8b5cf6)' : 'rgba(255,255,255,0.08)', color: name.trim() ? 'white' : '#6b7280', padding: '16px 24px', borderRadius: 16, fontSize: 15, fontWeight: 'bold', border: 'none', boxShadow: name.trim() ? '0 10px 25px -5px rgba(99,102,241,0.5)' : 'none', transition: 'all 0.2s' }}
               >
-                👤 Masuk ke LiteMeet
+                {name.trim() ? '🚀 Lanjutkan ke LiteMeet' : '✏️ Masukkan nama dulu'}
               </button>
             </div>
 
-            <p style={{ color: '#4b5563', fontSize: 10, fontWeight: 500, margin: 0 }}>Powered by Aralya @2026 • v0.2.0</p>
+            <p style={{ color: '#374151', fontSize: 10, fontWeight: 500 }}>Powered by Aralya @2026 • v0.2.0</p>
           </div>
         </div>
       );
@@ -1576,19 +1591,34 @@ export default function App() {
               ) : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
                   {/* Usage Tracking Section */}
-                  <div style={{ background: '#f9fafb', border: '1px solid #f3f4f6', borderRadius: 12, padding: 12 }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-                      <h3 style={{ fontSize: 11, fontWeight: 'bold', color: '#6b7280', textTransform: 'uppercase' }}>LiveKit Usage</h3>
-                      <span style={{ fontSize: 11, color: '#4f46e5', background: '#e0e7ff', padding: '2px 8px', borderRadius: 12, fontWeight: 'bold' }}>{usageData?.totalMinutesThisMonth || 0} / {usageData?.quota || 5000} mnt</span>
-                    </div>
-                    <div style={{ width: '100%', background: '#e5e7eb', borderRadius: 999, height: 6, marginBottom: 8 }}>
-                      <div style={{ background: '#4f46e5', height: 6, borderRadius: 999, width: `${Math.min(100, ((usageData?.totalMinutesThisMonth || 0) / (usageData?.quota || 5000)) * 100)}%` }}></div>
-                    </div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, color: '#6b7280' }}>
-                      <span>All-Time: {usageData?.totalMinutesAllTime || 0} m</span>
-                      <span>Active: {usageData?.activeParticipants || 0} users</span>
-                    </div>
-                  </div>
+                  {(() => {
+                    const used = usageData?.totalMinutesThisMonth || 0;
+                    const quota = usageData?.quota || 5000;
+                    const pct = Math.min(100, (used / quota) * 100);
+                    const barColor = used <= 2000 ? '#22c55e' : used <= 3500 ? '#eab308' : used <= 4500 ? '#f97316' : '#ef4444';
+                    const badgeColor = used <= 2000 ? '#16a34a' : used <= 3500 ? '#ca8a04' : used <= 4500 ? '#ea580c' : '#dc2626';
+                    const badgeBg = used <= 2000 ? '#f0fdf4' : used <= 3500 ? '#fefce8' : used <= 4500 ? '#fff7ed' : '#fef2f2';
+                    const statusLabel = used <= 2000 ? '🟢 Aman' : used <= 3500 ? '🟡 Sedang' : used <= 4500 ? '🟠 Waspada' : '🔴 Kritis';
+                    return (
+                      <div style={{ background: '#f9fafb', border: '1px solid #f3f4f6', borderRadius: 12, padding: 12 }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                          <h3 style={{ fontSize: 11, fontWeight: 'bold', color: '#6b7280', textTransform: 'uppercase' }}>LiveKit Usage (Bulan Ini)</h3>
+                          <span style={{ fontSize: 10, color: badgeColor, background: badgeBg, padding: '2px 8px', borderRadius: 12, fontWeight: 'bold' }}>{used} / {quota} mnt</span>
+                        </div>
+                        <div style={{ width: '100%', background: '#e5e7eb', borderRadius: 999, height: 8, marginBottom: 6 }}>
+                          <div style={{ background: barColor, height: 8, borderRadius: 999, width: `${pct}%`, transition: 'width 0.5s ease, background 0.3s ease' }}></div>
+                        </div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, color: badgeColor, fontWeight: 600, marginBottom: 4 }}>
+                          <span>{statusLabel} — {pct.toFixed(1)}%</span>
+                          <span>{quota - used} mnt tersisa</span>
+                        </div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, color: '#6b7280' }}>
+                          <span>All-Time: {usageData?.totalMinutesAllTime || 0} m</span>
+                          <span>Active: {usageData?.activeParticipants || 0} users</span>
+                        </div>
+                      </div>
+                    );
+                  })()}
 
                   {/* Presets Section */}
                   <div>

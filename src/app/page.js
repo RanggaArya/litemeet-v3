@@ -1167,30 +1167,46 @@ export default function Home() {
               ) : (
                 <div className="space-y-6">
                   {/* Usage Tracking Section */}
-                  <div className="bg-gray-50 border border-gray-100 rounded-xl p-4">
-                    <h3 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-3 flex justify-between items-center">
-                      <span>LiveKit Usage (Bulan Ini)</span>
-                      <span className="text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-full">{usageData?.totalMinutesThisMonth || 0} / {usageData?.quota || 5000} mnt</span>
-                    </h3>
-                    <div className="w-full bg-gray-200 rounded-full h-1.5 mb-3">
-                      <div className="bg-indigo-600 h-1.5 rounded-full" style={{ width: `${Math.min(100, ((usageData?.totalMinutesThisMonth || 0) / (usageData?.quota || 5000)) * 100)}%` }}></div>
-                    </div>
-                    <div className="flex justify-between text-[10px] text-gray-500 mb-2">
-                      <span>All-Time: {usageData?.totalMinutesAllTime || 0} mnt</span>
-                      <span>Active: {usageData?.activeParticipants || 0} users</span>
-                    </div>
-                    {usageData?.activeRooms && Object.keys(usageData.activeRooms).length > 0 && (
-                      <div className="mt-2 text-[10px]">
-                        <p className="font-semibold text-gray-600 mb-1">Active Rooms:</p>
-                        {Object.entries(usageData.activeRooms).map(([r, data]) => (
-                          <div key={r} className="flex justify-between text-gray-500 ml-2">
-                            <span>{r} ({data.participants.length} user)</span>
-                            <span>{Math.round((Date.now() - data.startedAt) / 60000)}m ago</span>
+                  {(() => {
+                    const used = usageData?.totalMinutesThisMonth || 0;
+                    const quota = usageData?.quota || 5000;
+                    const pct = Math.min(100, (used / quota) * 100);
+                    // Color tiers: green 0-2000, yellow 2001-3500, orange 3501-4500, red 4501+
+                    const barColor = used <= 2000 ? '#22c55e' : used <= 3500 ? '#eab308' : used <= 4500 ? '#f97316' : '#ef4444';
+                    const badgeBg = used <= 2000 ? '#f0fdf4' : used <= 3500 ? '#fefce8' : used <= 4500 ? '#fff7ed' : '#fef2f2';
+                    const badgeText = used <= 2000 ? '#16a34a' : used <= 3500 ? '#ca8a04' : used <= 4500 ? '#ea580c' : '#dc2626';
+                    const statusLabel = used <= 2000 ? '🟢 Aman' : used <= 3500 ? '🟡 Sedang' : used <= 4500 ? '🟠 Waspada' : '🔴 Kritis';
+                    return (
+                      <div className="bg-gray-50 border border-gray-100 rounded-xl p-4">
+                        <h3 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-3 flex justify-between items-center">
+                          <span>LiveKit Usage (Bulan Ini)</span>
+                          <span style={{ color: badgeText, background: badgeBg }} className="px-2 py-0.5 rounded-full font-bold text-[11px]">{used} / {quota} mnt</span>
+                        </h3>
+                        <div className="w-full bg-gray-200 rounded-full h-2 mb-2" style={{ position: 'relative' }}>
+                          <div style={{ background: barColor, height: '100%', borderRadius: 999, width: `${pct}%`, transition: 'width 0.5s ease, background 0.3s ease' }}></div>
+                        </div>
+                        <div className="flex justify-between text-[10px] mb-2" style={{ color: badgeText, fontWeight: 600 }}>
+                          <span>{statusLabel} — {pct.toFixed(1)}% terpakai</span>
+                          <span>{quota - used} mnt tersisa</span>
+                        </div>
+                        <div className="flex justify-between text-[10px] text-gray-500 mb-2">
+                          <span>All-Time: {usageData?.totalMinutesAllTime || 0} mnt</span>
+                          <span>Active: {usageData?.activeParticipants || 0} users</span>
+                        </div>
+                        {usageData?.activeRooms && Object.keys(usageData.activeRooms).length > 0 && (
+                          <div className="mt-2 text-[10px]">
+                            <p className="font-semibold text-gray-600 mb-1">Active Rooms:</p>
+                            {Object.entries(usageData.activeRooms).map(([r, data]) => (
+                              <div key={r} className="flex justify-between text-gray-500 ml-2">
+                                <span>{r} ({data.participants.length} user)</span>
+                                <span>{Math.round((Date.now() - data.startedAt) / 60000)}m ago</span>
+                              </div>
+                            ))}
                           </div>
-                        ))}
+                        )}
                       </div>
-                    )}
-                  </div>
+                    );
+                  })()}
 
                   {/* Presets Section */}
                   <div>
