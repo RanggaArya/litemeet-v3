@@ -228,6 +228,136 @@ function formatDate(ts) {
   return `${d.toLocaleDateString('id-ID', { day: 'numeric', month: 'short' })}, ${time}`;
 }
 
+// --- BIRTHDAY LOGIC & COMPONENTS ---
+function isBirthdayPeriod() {
+  const now = new Date();
+  // July is month 6 (0-indexed). Valid from July 12 00:00 to July 14 23:59.
+  return now.getMonth() === 6 && now.getDate() >= 12 && now.getDate() <= 14;
+}
+
+const WISHES = [
+  "Stay healthy and happy! ✨",
+  "Wishing you all the best! 💖",
+  "Lots of love! 🎈",
+  "May your dreams come true! 🌟",
+  "Always be happy! 🥰",
+  "Have a wonderful year ahead! 🎉"
+];
+
+function BirthdayStyles() {
+  return (
+    <style dangerouslySetInnerHTML={{__html: `
+      @keyframes floatBalloon {
+        0% { transform: translateY(100vh) translateX(0) rotate(0deg); opacity: 0; }
+        10% { opacity: 1; }
+        90% { opacity: 1; }
+        100% { transform: translateY(-20vh) translateX(20px) rotate(15deg); opacity: 0; }
+      }
+      @keyframes floatRibbon {
+        0% { transform: translateY(-10vh) rotate(0deg); opacity: 0; }
+        10% { opacity: 1; }
+        90% { opacity: 1; }
+        100% { transform: translateY(100vh) rotate(360deg); opacity: 0; }
+      }
+      @keyframes floatWish {
+        0% { transform: translateY(0) scale(0.8); opacity: 0; }
+        20% { transform: translateY(-20px) scale(1); opacity: 1; }
+        80% { transform: translateY(-80px) scale(1); opacity: 1; }
+        100% { transform: translateY(-100px) scale(0.8); opacity: 0; }
+      }
+      .balloon {
+        position: absolute;
+        bottom: -100px;
+        width: 60px;
+        height: 75px;
+        background: radial-gradient(circle at 30% 30%, #ff8da1, #ff4081);
+        border-radius: 50% 50% 50% 50% / 40% 40% 60% 60%;
+        box-shadow: inset -5px -5px 15px rgba(0,0,0,0.1), 0 5px 15px rgba(255,64,129,0.3);
+        animation: floatBalloon 15s linear infinite;
+        z-index: 5;
+      }
+      .balloon::after {
+        content: '';
+        position: absolute;
+        bottom: -10px;
+        left: 50%;
+        transform: translateX(-50%);
+        width: 10px;
+        height: 12px;
+        background: #ff4081;
+        clip-path: polygon(50% 0%, 0% 100%, 100% 100%);
+      }
+      .balloon::before {
+        content: '';
+        position: absolute;
+        bottom: -40px;
+        left: 50%;
+        width: 2px;
+        height: 40px;
+        background: rgba(255, 255, 255, 0.4);
+      }
+      .ribbon {
+        position: absolute;
+        top: -50px;
+        width: 15px;
+        height: 30px;
+        background: #ffb6c1;
+        border-radius: 5px;
+        animation: floatRibbon 10s linear infinite;
+        z-index: 5;
+        box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+      }
+      .wish-text {
+        position: absolute;
+        font-family: 'Comic Sans MS', cursive, sans-serif;
+        color: #ff4081;
+        font-size: 14px;
+        font-weight: bold;
+        text-shadow: 1px 1px 0 #fff, -1px -1px 0 #fff, 1px -1px 0 #fff, -1px 1px 0 #fff;
+        animation: floatWish 8s ease-in-out infinite;
+        z-index: 6;
+      }
+    `}} />
+  );
+}
+
+function BirthdayDecorations() {
+  return (
+    <div className="absolute inset-0 overflow-hidden pointer-events-none">
+      <BirthdayStyles />
+      {/* Balloons */}
+      {[...Array(12)].map((_, i) => (
+        <div key={'b'+i} className="balloon" style={{ 
+          left: \`\${Math.random() * 100}%\`, 
+          animationDelay: \`\${Math.random() * 15}s\`,
+          animationDuration: \`\${10 + Math.random() * 10}s\`,
+          transform: \`scale(\${0.6 + Math.random() * 0.6})\`,
+          filter: \`hue-rotate(\${Math.random() * 40 - 20}deg)\`
+        }} />
+      ))}
+      {/* Ribbons */}
+      {[...Array(15)].map((_, i) => (
+        <div key={'r'+i} className="ribbon" style={{ 
+          left: \`\${Math.random() * 100}%\`, 
+          animationDelay: \`\${Math.random() * 10}s\`,
+          animationDuration: \`\${8 + Math.random() * 7}s\`,
+          background: ['#ffb6c1', '#ffd700', '#87cefa', '#dda0dd'][Math.floor(Math.random() * 4)]
+        }} />
+      ))}
+      {/* Wishes */}
+      {[...Array(8)].map((_, i) => (
+        <div key={'w'+i} className="wish-text" style={{
+          left: \`\${5 + Math.random() * 80}%\`,
+          bottom: \`\${10 + Math.random() * 50}%\`,
+          animationDelay: \`\${Math.random() * 8}s\`,
+        }}>
+          {WISHES[Math.floor(Math.random() * WISHES.length)]}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export default function Home() {
   // --- AUTH STATE ---
   const [authUser, setAuthUser] = useState(null); // Firebase user or null
@@ -867,8 +997,23 @@ export default function Home() {
 
   // --- AUTH SCREEN (before lobby) ---
   if (!joined && authScreen && !authLoading) {
+    const isBirthday = isBirthdayPeriod();
     return (
-      <div className="flex min-h-screen items-center justify-center bg-[#0a0a0f] text-white p-4 font-sans relative overflow-hidden">
+      <div className={\`flex min-h-screen items-center justify-center text-white p-4 font-sans relative overflow-hidden \${isBirthday ? 'bg-pink-50' : 'bg-[#0a0a0f]'}\`}>
+        {isBirthday && <BirthdayDecorations />}
+        
+        {isBirthday && (
+          <div className="absolute top-10 left-0 w-full overflow-hidden whitespace-nowrap bg-pink-500/80 text-white py-3 shadow-lg shadow-pink-500/30 z-20 transform -rotate-2">
+            <div className="animate-[marquee_15s_linear_infinite] inline-block font-extrabold text-2xl tracking-widest text-shadow-md">
+              ❤️ HAPPY BIRTHDAY NABILLA ALYA CHOIRUNNISA ❤️ &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+              ❤️ HAPPY BIRTHDAY NABILLA ALYA CHOIRUNNISA ❤️ &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+              ❤️ HAPPY BIRTHDAY NABILLA ALYA CHOIRUNNISA ❤️
+            </div>
+            <style dangerouslySetInnerHTML={{__html: \`
+              @keyframes marquee { 0% { transform: translateX(0); } 100% { transform: translateX(-50%); } }
+            \`}} />
+          </div>
+        )}
         {/* --- PWA INSTALL POPUP --- */}
         {showPWAInstall && !isPWAInstalled && (
           <div className="fixed bottom-4 left-4 right-4 z-[200] animate-slide-up">
@@ -910,11 +1055,15 @@ export default function Home() {
           </div>
         )}
         {/* Animated gradient orbs */}
-        <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-indigo-600/20 rounded-full blur-[100px] animate-pulse" />
-        <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-purple-600/20 rounded-full blur-[100px] animate-pulse" style={{animationDelay: '1s'}} />
-        <div className="absolute top-1/2 left-1/2 w-64 h-64 bg-pink-600/10 rounded-full blur-[80px] animate-pulse" style={{animationDelay: '2s'}} />
+        {!isBirthday && (
+          <>
+            <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-indigo-600/20 rounded-full blur-[100px] animate-pulse" />
+            <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-purple-600/20 rounded-full blur-[100px] animate-pulse" style={{animationDelay: '1s'}} />
+            <div className="absolute top-1/2 left-1/2 w-64 h-64 bg-pink-600/10 rounded-full blur-[80px] animate-pulse" style={{animationDelay: '2s'}} />
+          </>
+        )}
 
-        <div className="relative z-10 flex flex-col items-center gap-8 animate-slide-up">
+        <div className="relative z-10 flex flex-col items-center gap-8 animate-slide-up mt-10">
           {/* Logo */}
           <div className="flex flex-col items-center gap-4">
             <div className="relative">
@@ -947,25 +1096,37 @@ export default function Home() {
 
             <button
               onClick={handleGuestContinue}
-              className="w-full flex items-center justify-center gap-2 bg-white/5 hover:bg-white/10 text-gray-300 py-3.5 px-6 rounded-2xl font-bold text-sm border border-white/10 hover:border-white/20 transition-all transform hover:-translate-y-0.5 active:translate-y-0"
+              className={\`w-full flex items-center justify-center gap-2 py-3.5 px-6 rounded-2xl font-bold text-sm transition-all transform hover:-translate-y-0.5 active:translate-y-0 \${isBirthday ? 'bg-pink-500 text-white hover:bg-pink-600 shadow-md hover:shadow-lg' : 'bg-white/5 hover:bg-white/10 text-gray-300 border border-white/10 hover:border-white/20'}\`}
             >
               👤 Masuk sebagai Guest
             </button>
           </div>
 
-          <p className="text-gray-600 text-[10px] font-medium">Powered by Aralya @2026 • v0.2.0</p>
+          <p className={\`text-[10px] font-medium \${isBirthday ? 'text-pink-600/60' : 'text-gray-600'}\`}>Powered by Aralya @2026 • v0.2.0</p>
         </div>
       </div>
     );
   }
 
   if (!joined) {
+    const isBirthday = isBirthdayPeriod();
     return (
-      <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-slate-50 via-indigo-50/40 to-purple-50/30 text-gray-800 p-4 font-sans relative overflow-hidden">
-        <ParticleCanvas />
+      <div className={\`flex min-h-screen items-center justify-center text-gray-800 p-4 font-sans relative overflow-hidden \${isBirthday ? 'bg-gradient-to-br from-pink-50 via-rose-50 to-pink-100' : 'bg-gradient-to-br from-slate-50 via-indigo-50/40 to-purple-50/30'}\`}>
+        {isBirthday && <BirthdayDecorations />}
+        {!isBirthday && <ParticleCanvas />}
 
-        <div className="relative w-full max-w-sm z-10 animate-slide-up">
-          <div className="w-full bg-gradient-to-b from-pink-50/80 to-white/95 backdrop-blur-3xl px-5 py-5 rounded-[1.5rem] shadow-[0_20px_80px_rgba(236,72,153,0.08),0_8px_32px_rgba(0,0,0,0.06)] border border-pink-100/60 relative overflow-hidden group">
+        {isBirthday && (
+          <div className="absolute top-0 left-0 w-full overflow-hidden whitespace-nowrap bg-gradient-to-r from-pink-400 to-rose-500 text-white py-2 shadow-md z-20">
+            <div className="animate-[marquee_15s_linear_infinite] inline-block font-bold text-sm tracking-wider">
+              ❤️ HAPPY BIRTHDAY NABILLA ALYA CHOIRUNNISA ❤️ &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+              ❤️ HAPPY BIRTHDAY NABILLA ALYA CHOIRUNNISA ❤️ &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+              ❤️ HAPPY BIRTHDAY NABILLA ALYA CHOIRUNNISA ❤️
+            </div>
+          </div>
+        )}
+
+        <div className={\`relative w-full max-w-sm z-10 animate-slide-up \${isBirthday ? 'mt-8' : ''}\`}>
+          <div className={\`w-full backdrop-blur-3xl px-5 py-5 rounded-[1.5rem] relative overflow-hidden group \${isBirthday ? 'bg-white/90 shadow-[0_20px_80px_rgba(255,105,180,0.15)] border border-pink-200' : 'bg-gradient-to-b from-pink-50/80 to-white/95 shadow-[0_20px_80px_rgba(236,72,153,0.08),0_8px_32px_rgba(0,0,0,0.06)] border border-pink-100/60'}\`}>
             {/* Efek kilap on hover */}
             <div className="absolute top-0 -inset-full h-full w-1/2 z-5 block transform -skew-x-12 bg-gradient-to-r from-transparent to-white opacity-40 group-hover:animate-shine"></div>
 
@@ -995,8 +1156,8 @@ export default function Home() {
           )}
 
           <div className="text-center mb-4">
-            <div className="inline-flex items-center justify-center w-12 h-12 rounded-2xl bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500 mb-3 shadow-lg ring-3 ring-pink-100 animate-float">
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>
+            <div className={\`inline-flex items-center justify-center w-12 h-12 rounded-2xl mb-3 shadow-lg ring-3 ring-pink-100 animate-float \${isBirthday ? 'bg-gradient-to-br from-pink-400 to-rose-500' : 'bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500'}\`}>
+              {isBirthday ? <span className="text-2xl">🎉</span> : <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>}
             </div>
             <h1 className="text-2xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-indigo-600 to-purple-600 tracking-tight leading-tight">Lite-Meet</h1>
             <p className="text-gray-400 text-[9px] tracking-[0.2em] font-bold uppercase mt-0.5">Video Conference</p>
@@ -3022,8 +3183,19 @@ function MyVideoConference({ myName, myPhotoURL, bandwidthMode, setBandwidthMode
           </div>
         )}
 
+        {/* --- BIRTHDAY MARQUEE (ROOM) --- */}
+        {isBirthdayPeriod() && (
+          <div className="w-[98vw] overflow-hidden whitespace-nowrap bg-pink-500/80 text-white py-1 rounded-t-lg shadow-md -mb-1 z-10 border-t border-x border-pink-400/50">
+            <div className="animate-[marquee_15s_linear_infinite] inline-block font-bold text-[10px] tracking-wider">
+              ❤️ HAPPY BIRTHDAY NABILLA ALYA CHOIRUNNISA ❤️ &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+              ❤️ HAPPY BIRTHDAY NABILLA ALYA CHOIRUNNISA ❤️ &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+              ❤️ HAPPY BIRTHDAY NABILLA ALYA CHOIRUNNISA ❤️
+            </div>
+          </div>
+        )}
+
         {/* --- BUTTON BAR (inside scrollable container) --- */}
-        <div className="flex items-center gap-1.5 px-2 py-1 rounded-xl max-w-[98vw] overflow-x-auto no-scrollbar">
+        <div className={`flex items-center gap-1.5 px-2 py-1 rounded-xl max-w-[98vw] overflow-x-auto no-scrollbar ${isBirthdayPeriod() ? 'bg-pink-900/30 border border-pink-500/30' : ''}`}>
 
           {!isAdmin ? (
             <>
