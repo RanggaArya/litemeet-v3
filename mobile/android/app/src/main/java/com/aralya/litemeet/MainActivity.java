@@ -1,15 +1,12 @@
 package com.aralya.litemeet;
 
 import android.app.PictureInPictureParams;
-import android.content.Context;
 import android.content.Intent;
 import android.content.res.Configuration;
-import android.media.AudioManager;
 import android.os.Build;
 import android.os.Bundle;
 import android.util.Log;
 import android.util.Rational;
-import android.view.KeyEvent;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import com.getcapacitor.BridgeActivity;
@@ -17,54 +14,6 @@ import com.getcapacitor.BridgeActivity;
 public class MainActivity extends BridgeActivity {
 
     private static final String TAG = "LiteMeetMain";
-
-    // Flag dari AudioRoutePlugin: apakah sedang meeting aktif
-    private volatile boolean meetingActive = false;
-
-    /**
-     * Dipanggil oleh AudioRoutePlugin untuk memberi tahu bahwa meeting
-     * sedang aktif / tidak aktif, agar volume keys di-intercept.
-     */
-    public void setMeetingActive(boolean active) {
-        this.meetingActive = active;
-        Log.d(TAG, "meetingActive = " + active);
-    }
-
-    /**
-     * KUNCI UTAMA: Intercept tombol volume hardware.
-     *
-     * Saat meeting aktif, WebRTC di WebView secara internal mengeset
-     * audio mode ke MODE_IN_COMMUNICATION sehingga tombol volume
-     * mengontrol STREAM_VOICE_CALL. Kita override di sini agar
-     * selalu mengontrol STREAM_MUSIC (volume media/speaker biasa).
-     */
-    @Override
-    public boolean onKeyDown(int keyCode, KeyEvent event) {
-        if (meetingActive && (keyCode == KeyEvent.KEYCODE_VOLUME_UP || keyCode == KeyEvent.KEYCODE_VOLUME_DOWN)) {
-            AudioManager am = (AudioManager) getSystemService(Context.AUDIO_SERVICE);
-            if (am != null) {
-                int direction = (keyCode == KeyEvent.KEYCODE_VOLUME_UP)
-                    ? AudioManager.ADJUST_RAISE
-                    : AudioManager.ADJUST_LOWER;
-                am.adjustStreamVolume(
-                    AudioManager.STREAM_MUSIC,
-                    direction,
-                    AudioManager.FLAG_SHOW_UI
-                );
-            }
-            return true; // consume event — jangan teruskan ke sistem
-        }
-        return super.onKeyDown(keyCode, event);
-    }
-
-    @Override
-    public boolean onKeyUp(int keyCode, KeyEvent event) {
-        // Consume volume key up juga supaya tidak trigger default behavior
-        if (meetingActive && (keyCode == KeyEvent.KEYCODE_VOLUME_UP || keyCode == KeyEvent.KEYCODE_VOLUME_DOWN)) {
-            return true;
-        }
-        return super.onKeyUp(keyCode, event);
-    }
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
