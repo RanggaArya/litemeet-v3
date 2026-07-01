@@ -320,12 +320,16 @@ function BirthdayStyles() {
   );
 }
 
-function BirthdayDecorations() {
+function BirthdayDecorations({ inRoom = false }) {
+  const wishPositions = [
+    { left: '5%', bottom: '15%' }, { left: '10%', bottom: '45%' }, { left: '5%', bottom: '75%' },
+    { left: '75%', bottom: '20%' }, { left: '80%', bottom: '50%' }, { left: '75%', bottom: '80%' },
+    { left: '15%', bottom: '25%' }, { left: '85%', bottom: '35%' },
+  ];
   return (
-    <div className="absolute inset-0 overflow-hidden pointer-events-none hide-in-pip">
+    <div className={`absolute inset-0 overflow-hidden pointer-events-none hide-in-pip ${inRoom ? 'opacity-40' : ''}`}>
       <BirthdayStyles />
-      {/* Balloons (20 total, mostly on left and right edges) */}
-      {[...Array(20)].map((_, i) => (
+      {!inRoom && [...Array(20)].map((_, i) => (
         <div key={'b'+i} className="balloon" style={{ 
           left: `${Math.random() > 0.5 ? Math.random() * 25 : 75 + Math.random() * 25}%`, 
           animationDelay: `${Math.random() * 15}s`,
@@ -334,8 +338,7 @@ function BirthdayDecorations() {
           filter: `hue-rotate(${Math.random() * 40 - 20}deg)`
         }} />
       ))}
-      {/* Confetti (Emojis) */}
-      {[...Array(30)].map((_, i) => (
+      {[...Array(inRoom ? 10 : 30)].map((_, i) => (
         <div key={'r'+i} className="confetti-icon" style={{ 
           left: `${Math.random() * 100}%`, 
           animationDelay: `${Math.random() * 10}s`,
@@ -344,17 +347,26 @@ function BirthdayDecorations() {
           {['🎀', '✨', '🎉', '💖', '🎊', '🎁', '🎂'][Math.floor(Math.random() * 7)]}
         </div>
       ))}
-      {/* Wishes (Kept away from center 30%-70% to avoid overlapping forms) */}
-      {[...Array(12)].map((_, i) => (
+      {!inRoom && wishPositions.map((pos, i) => (
         <div key={'w'+i} className="wish-text" style={{
-          left: `${Math.random() > 0.5 ? 5 + Math.random() * 20 : 70 + Math.random() * 20}%`,
-          bottom: `${10 + Math.random() * 75}%`,
+          left: pos.left,
+          bottom: pos.bottom,
           animationDelay: `${Math.random() * 8}s`,
         }}>
-          {WISHES[Math.floor(Math.random() * WISHES.length)]}
+          {WISHES[i % WISHES.length]}
         </div>
       ))}
     </div>
+  );
+}
+
+function BirthdayMarqueeText() {
+  return (
+    <>
+      {[...Array(15)].map((_, i) => (
+        <span key={i} className="mx-6">❤️ HAPPY BIRTHDAY NABILLA ALYA CHOIRUNNISA ❤️</span>
+      ))}
+    </>
   );
 }
 
@@ -1003,15 +1015,10 @@ export default function Home() {
         {isBirthday && <BirthdayDecorations />}
         
         {isBirthday && (
-          <div className="absolute top-10 left-0 w-full overflow-hidden whitespace-nowrap bg-pink-500/80 text-white py-3 shadow-lg shadow-pink-500/30 z-20 transform -rotate-2">
-            <div className="animate-[marquee_15s_linear_infinite] inline-block font-extrabold text-2xl tracking-widest text-shadow-md">
-              ❤️ HAPPY BIRTHDAY NABILLA ALYA CHOIRUNNISA ❤️ &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-              ❤️ HAPPY BIRTHDAY NABILLA ALYA CHOIRUNNISA ❤️ &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-              ❤️ HAPPY BIRTHDAY NABILLA ALYA CHOIRUNNISA ❤️
+          <div className="absolute top-10 left-0 w-full overflow-hidden whitespace-nowrap bg-pink-500/80 text-white py-3 shadow-lg shadow-pink-500/30 z-20">
+            <div className="animate-[marquee_30s_linear_infinite] inline-block font-extrabold text-2xl tracking-widest text-shadow-md">
+              <BirthdayMarqueeText />
             </div>
-            <style dangerouslySetInnerHTML={{__html: `
-              @keyframes marquee { 0% { transform: translateX(0); } 100% { transform: translateX(-50%); } }
-            `}} />
           </div>
         )}
         {/* --- PWA INSTALL POPUP --- */}
@@ -1117,20 +1124,16 @@ export default function Home() {
 
         {isBirthday && (
           <div className="absolute top-0 left-0 w-full overflow-hidden whitespace-nowrap bg-gradient-to-r from-pink-400 to-rose-500 text-white py-2 shadow-md z-20">
-            <div className="animate-[marquee_15s_linear_infinite] inline-block font-bold text-sm tracking-wider">
-              ❤️ HAPPY BIRTHDAY NABILLA ALYA CHOIRUNNISA ❤️ &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-              ❤️ HAPPY BIRTHDAY NABILLA ALYA CHOIRUNNISA ❤️ &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-              ❤️ HAPPY BIRTHDAY NABILLA ALYA CHOIRUNNISA ❤️
+            <div className="animate-[marquee_30s_linear_infinite] inline-block font-bold text-sm tracking-wider">
+              <BirthdayMarqueeText />
             </div>
           </div>
         )}
         
         {isBirthday && (
           <div className="absolute bottom-0 left-0 w-full overflow-hidden whitespace-nowrap bg-gradient-to-r from-rose-500 to-pink-400 text-white py-2 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.1)] z-20 hide-in-pip">
-            <div className="animate-[marquee_15s_linear_infinite] inline-block font-bold text-sm tracking-wider">
-              ❤️ HAPPY BIRTHDAY NABILLA ALYA CHOIRUNNISA ❤️ &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-              ❤️ HAPPY BIRTHDAY NABILLA ALYA CHOIRUNNISA ❤️ &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-              ❤️ HAPPY BIRTHDAY NABILLA ALYA CHOIRUNNISA ❤️
+            <div className="animate-[marquee_30s_linear_infinite] inline-block font-bold text-sm tracking-wider">
+              <BirthdayMarqueeText />
             </div>
           </div>
         )}
@@ -2685,7 +2688,7 @@ function MyVideoConference({ myName, myPhotoURL, bandwidthMode, setBandwidthMode
       ) : (
         <>
           {/* --- BIRTHDAY DECORATIONS FOR ROOM --- */}
-          {isBirthdayPeriod() && <BirthdayDecorations />}
+          {isBirthdayPeriod() && <BirthdayDecorations inRoom={true} />}
 
           {/* --- PIP ANIMATED BORDER OVERLAY --- */}
       <div className="pip-border-overlay"></div>
@@ -3199,10 +3202,8 @@ function MyVideoConference({ myName, myPhotoURL, bandwidthMode, setBandwidthMode
         {/* --- BIRTHDAY MARQUEE (ROOM) --- */}
         {isBirthdayPeriod() && (
           <div className="w-[98vw] overflow-hidden whitespace-nowrap bg-gradient-to-r from-pink-500 to-rose-500 text-white py-1.5 rounded-t-lg shadow-md -mb-1 z-10 border-t border-x border-pink-400/50 hide-in-pip">
-            <div className="animate-[marquee_15s_linear_infinite] inline-block font-bold text-[10px] tracking-wider">
-              ❤️ HAPPY BIRTHDAY NABILLA ALYA CHOIRUNNISA ❤️ &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-              ❤️ HAPPY BIRTHDAY NABILLA ALYA CHOIRUNNISA ❤️ &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-              ❤️ HAPPY BIRTHDAY NABILLA ALYA CHOIRUNNISA ❤️
+            <div className="animate-[marquee_30s_linear_infinite] inline-block font-bold text-[10px] tracking-wider">
+              <BirthdayMarqueeText />
             </div>
           </div>
         )}
